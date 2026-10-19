@@ -103,7 +103,7 @@ def final(listing: Path, info: MediaInfo, size: tuple[int, int], s: Settings, ca
     vf = [crop_filter(info, size, s), "setsar=1"]
     if captions is not None:
         ass = f"ass={captions.name}"
-        fonts = media.bundle_dir() / "vflow" / "fonts"
+        fonts = Path(__file__).resolve().parent / "fonts"
         if fonts.is_dir():
             # Copied next to the work files so the filter can use a relative path (no "C:" to escape).
             shutil.copytree(fonts, workdir / "fonts", dirs_exist_ok=True)

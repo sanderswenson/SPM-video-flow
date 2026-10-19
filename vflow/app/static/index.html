@@ -36,7 +36,6 @@
 
   .banner { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--radius);
     background: var(--panel); border: 1px solid var(--line); }
-  .banner.update { border-color: #5c5020; background: #2a2614; }
   .banner .msg { flex: 1; }
 
   .drop { border: 2px dashed var(--line); border-radius: 14px; padding: 36px 20px; text-align: center;
@@ -130,10 +129,6 @@
   </header>
   <main>
     <div class="wrap">
-      <div id="updateBanner" class="banner update" hidden>
-        <div class="msg" id="updateMsg"></div>
-        <button class="primary" id="updateBtn">Install &amp; restart</button>
-      </div>
       <div id="keyBanner" class="banner" hidden>
         <div class="msg">Add a Claude API key to remove retakes and false starts automatically and get post copy. Without it, vflow still cuts silences and filler words.</div>
         <button id="keyBannerBtn">Add key</button>
@@ -224,14 +219,9 @@
       <legend>Claude API key</legend>
       <div class="inline"><input type="password" id="keyInput" placeholder="sk-ant-..."><button id="saveKey">Save</button></div>
       <div id="keyStatus" class="hint"></div>
-      <div class="hint">Stored in Windows Credential Manager. Get one at console.anthropic.com.</div>
+      <div class="hint">Stored in your system's credential store. Get one at console.anthropic.com.</div>
     </fieldset>
 
-    <fieldset>
-      <legend>About</legend>
-      <div class="hint" id="aboutVer"></div>
-      <div><button id="checkUpdate">Check for updates</button> <span id="checkMsg" class="hint"></span></div>
-    </fieldset>
   </div>
 </aside>
 
@@ -317,18 +307,8 @@ let lastJobsHtml = "";
 function render() {
   const s = state;
   $("ver").textContent = "v" + s.version;
-  $("aboutVer").textContent = `vflow ${s.version}` + (s.updates_enabled ? "" : " (updates are off in development builds)");
   $("keyBanner").hidden = s.has_key || !s.settings.use_llm;
   $("pathAdd").hidden = s.native;
-
-  const u = s.update, us = s.update_state;
-  $("updateBanner").hidden = !u;
-  if (u) {
-    $("updateMsg").textContent = us.status === "downloading" ? `Downloading vflow ${u.version}… ${Math.round(us.progress * 100)}%`
-      : us.status === "installing" ? `Installing vflow ${u.version}… the app will restart.`
-      : us.status === "error" ? `Update failed: ${us.message}` : `vflow ${u.version} is available.`;
-    $("updateBtn").disabled = us.status === "downloading" || us.status === "installing";
-  }
 
   const jobs = s.jobs;
   $("drop").classList.toggle("compact", jobs.length > 0);
@@ -474,12 +454,6 @@ $("saveKey").onclick = async () => {
     else { st.className = "err-text"; st.textContent = r.error; }
   } catch (err) { st.className = "err-text"; st.textContent = err.message; }
 };
-$("checkUpdate").onclick = async () => {
-  $("checkMsg").textContent = "Checking…";
-  try { const r = await api("update/check", {}); $("checkMsg").textContent = r.update ? `Version ${r.update.version} is available.` : "You're up to date."; }
-  catch (err) { $("checkMsg").textContent = "Couldn't check: " + err.message; }
-};
-$("updateBtn").onclick = async () => { const r = await api("update/install", {}); if (!r.ok) toast(r.error); };
 
 poll();
 </script>

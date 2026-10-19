@@ -9,7 +9,3 @@ work/
 *.mov
 *.mkv
 *.wav
-vflow/_build.py
-build/
-dist/
-packaging/ffmpeg/

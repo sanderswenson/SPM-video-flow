@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -31,19 +30,7 @@ class MediaInfo:
         return self.width, self.height
 
 
-def bundle_dir() -> Path:
-    """Where bundled resources live: the PyInstaller unpack dir, or the repo root in development."""
-    return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
-
-
-def use_bundled_ffmpeg() -> None:
-    bundled = bundle_dir() / "ffmpeg"
-    if bundled.is_dir():
-        os.environ["PATH"] = str(bundled) + os.pathsep + os.environ.get("PATH", "")
-
-
 def require_ffmpeg() -> None:
-    use_bundled_ffmpeg()
     for tool in ("ffmpeg", "ffprobe"):
         if shutil.which(tool) is None:
             raise SystemExit(f"{tool} not found on PATH. Install ffmpeg (brew install ffmpeg / apt install ffmpeg).")

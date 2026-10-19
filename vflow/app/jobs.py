@@ -11,7 +11,6 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .. import media
 from ..pipeline import make_plan, output_for, render_plan, workdir_for
 from ..plan import Plan, segments, summary
 from .store import AppSettings, work_root
@@ -169,7 +168,6 @@ class JobManager:
         out_dir = Path(self.settings.output_dir)
         report = self._report(job)
         try:
-            media.use_bundled_ffmpeg()
             wd = job.workdir
             if rendering_only:
                 plan = Plan.load(wd / "plan.json")

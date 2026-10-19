@@ -11,15 +11,13 @@ import os
 import secrets
 import subprocess
 import sys
-import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
 from typing import Callable
 
 from .. import __version__, llm
-from . import store, updater
+from . import store
 from .jobs import JobManager
 
 
@@ -29,43 +27,9 @@ class App:
         store.load_api_key_into_env()
         self.jobs = JobManager(self.settings)
         self.token = secrets.token_urlsafe(24)
-        self.update: dict | None = None
-        self.update_state = {"status": "idle", "progress": 0.0, "message": ""}
-        # Set by the window layer: native file dialogs and quitting.
+        # Set by the window layer: native file dialogs.
         self.pick_files: Callable[[], list[str]] | None = None
         self.pick_folder: Callable[[], str | None] | None = None
-        self.quit: Callable[[], None] = lambda: os._exit(0)
-        threading.Thread(target=self._update_loop, daemon=True, name="vflow-updates").start()
-
-    # --- updates -----------------------------------------------------------
-
-    def _update_loop(self) -> None:
-        time.sleep(3)
-        while True:
-            try:
-                self.update = updater.check()
-            except Exception as e:
-                print(f"update check failed: {e}")
-            time.sleep(6 * 3600)
-
-    def install_update(self) -> None:
-        info = self.update
-        if info is None or self.update_state["status"] == "downloading":
-            return
-
-        def go() -> None:
-            st = self.update_state
-            st.update(status="downloading", progress=0.0, message="")
-            try:
-                path = updater.download(info, lambda p: st.update(progress=p))
-                st.update(status="installing")
-                updater.launch_installer(path)
-                time.sleep(1.0)
-                self.quit()
-            except Exception as e:
-                st.update(status="error", message=str(e))
-
-        threading.Thread(target=go, daemon=True).start()
 
     # --- API ---------------------------------------------------------------
 
@@ -76,9 +40,6 @@ class App:
             "settings": self.settings.to_dict(),
             "has_key": llm.available(),
             "native": self.pick_files is not None,
-            "update": self.update,
-            "update_state": self.update_state,
-            "updates_enabled": updater.enabled(),
         }
 
     def handle(self, method: str, path: str, body: dict) -> object:
@@ -110,14 +71,6 @@ class App:
             case "POST", ["clear"]:
                 self.jobs.clear_finished()
                 return {}
-            case "POST", ["update", "install"]:
-                if self.jobs.busy():
-                    return {"ok": False, "error": "Wait for the current video to finish."}
-                self.install_update()
-                return {"ok": True}
-            case "POST", ["update", "check"]:
-                self.update = updater.check()
-                return {"update": self.update}
             case "GET", ["jobs", job_id, "plan"]:
                 plan = self.jobs.load_plan(job_id)
                 return {
