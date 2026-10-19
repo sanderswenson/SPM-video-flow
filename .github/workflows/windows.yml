@@ -95,19 +95,30 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
           Get-ChildItem dist/*-setup.exe
 
-      - name: Test the installer (silent install, launch check, uninstall)
+      - name: Test the installer (silent install, relaunch, uninstall)
         shell: pwsh
         run: |
           $setup = (Get-ChildItem dist/*-setup.exe).FullName
-          $p = Start-Process $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait -PassThru
+          # WaitForExit waits for the installer only. (-Wait would also wait for the app it launches.)
+          $p = Start-Process $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -PassThru
+          if (-not $p.WaitForExit(300000)) { throw "installer timed out" }
           if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
-          Start-Sleep 5
           $exe = "$env:LOCALAPPDATA\Programs\vflow\vflow.exe"
           if (-not (Test-Path $exe)) { throw "vflow.exe not installed" }
-          Get-Process vflow -ErrorAction SilentlyContinue | Stop-Process -Force
+          # The installer relaunches the app (as a self-update would); it should stay up.
+          Start-Sleep 8
+          $running = Get-Process vflow -ErrorAction SilentlyContinue
+          if (-not $running) { throw "app did not stay running after install"; }
+          Write-Output "app running after install (pid $($running.Id -join ','))"
+          $running | Stop-Process -Force
+          Start-Sleep 2
           $un = "$env:LOCALAPPDATA\Programs\vflow\unins000.exe"
-          Start-Process $un -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait
-          Write-Output "install / uninstall ok"
+          $u = Start-Process $un -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -PassThru
+          if (-not $u.WaitForExit(120000)) { throw "uninstaller timed out" }
+          # The uninstaller finishes removal from a temp copy of itself, so poll briefly.
+          for ($i = 0; $i -lt 20 -and (Test-Path $exe); $i++) { Start-Sleep 1 }
+          if (Test-Path $exe) { throw "uninstall left vflow.exe behind" }
+          Write-Output "install / relaunch / uninstall ok"
 
       - uses: actions/upload-artifact@v4
         with:
