@@ -33,7 +33,7 @@ class MediaInfo:
 def require_ffmpeg() -> None:
     for tool in ("ffmpeg", "ffprobe"):
         if shutil.which(tool) is None:
-            raise SystemExit(f"{tool} not found on PATH. Install ffmpeg (brew install ffmpeg / apt install ffmpeg).")
+            raise SystemExit(f"{tool} not found on PATH. Install ffmpeg (Windows: winget install Gyan.FFmpeg, macOS: brew install ffmpeg, Linux: apt install ffmpeg) and open a new terminal.")
 
 
 def probe(path: Path) -> MediaInfo:

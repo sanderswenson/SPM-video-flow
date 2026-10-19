@@ -11,37 +11,61 @@ Drop in an uncut talking-head clip. vflow:
 
 Every cut is frame-aligned, with a 12 ms audio fade at each cut so there are no clicks.
 
-## Desktop app
+## Setup
 
-A simple window on top of the same pipeline:
+You need **Python 3.10+** (3.12 is what's been tested on Windows), **ffmpeg**, and git.
+
+**1. Install ffmpeg** (must be on your PATH):
 
 ```bash
-pip install -e .
-vflow-app            # native window (Edge WebView2 on Windows, WebKit on macOS)
-vflow-app --browser  # or in your default browser
+winget install Gyan.FFmpeg     # Windows (then open a new terminal)
+brew install ffmpeg            # macOS
+sudo apt install ffmpeg        # Debian/Ubuntu
 ```
 
+Check with `ffmpeg -version`.
+
+**2. Get the code and install it** in a virtual environment:
+
+```bash
+git clone https://github.com/sanderswenson/SPM-video-flow.git
+cd SPM-video-flow
+python -m venv .venv
+.venv\Scripts\activate          # Windows (PowerShell / cmd)
+source .venv/bin/activate        # macOS / Linux
+pip install -e .
+```
+
+Activate the venv again (`.venv\Scripts\activate`) in each new terminal before running vflow.
+
+**3. Optional: a Claude API key** turns on retake detection and post copy. Without one, vflow still cuts
+silences and filler words. In the desktop app, paste it in **Settings**. For the command line, set it in your shell:
+
+```bash
+$env:ANTHROPIC_API_KEY = "sk-ant-..."    # Windows PowerShell (this session only)
+export ANTHROPIC_API_KEY=sk-ant-...      # macOS / Linux
+```
+
+The first video you process downloads the Whisper speech model (Balanced / `small.en` is about 500 MB).
+
+## Desktop app
+
+```bash
+vflow-app            # opens a window
+vflow-app --browser  # or use your default browser instead
+```
+
+If no native window is available (some Linux setups), it opens in the browser automatically.
+
 - **Drop raw videos** on the window (or click **Add videos**). They queue and process one at a time.
-- **Settings**: format, framing, pacing, caption style, editor notes, Whisper speed, and your Claude API key
-  (stored in the system credential store).
+- Finished videos go to **`Videos/vflow`** in your home folder (change it in Settings, or click **Output folder** to open it).
+- **Settings**: format, framing, pacing, caption style, editor notes, transcription speed, and your Claude API key
+  (stored in the system credential store, e.g. Windows Credential Manager).
 - **Review cuts** (optional): turn on "Pause before rendering" to see the transcript with every cut struck
   through and color-coded by reason. Click a word to cut or restore it, shift-click to do a range, then **Render**.
 - **Done**: play the video, show it in the file manager, and copy the generated caption + hashtags.
 
 ## Command line
-
-### Setup
-
-You need Python 3.10+ and ffmpeg.
-
-```bash
-brew install ffmpeg            # or: apt install ffmpeg
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
-export ANTHROPIC_API_KEY=sk-ant-...   # optional, turns on retake detection + post copy
-```
-
-The first run downloads the Whisper model (`small.en` is about 500 MB).
 
 ### Use
 
@@ -61,7 +85,7 @@ vflow edit raw.mov --plan-only          # writes work/raw/plan.json and stops
 vflow render work/raw                   # render from the (edited) plan
 ```
 
-Re-running `edit` on the same file reuses the cached transcript in `work/<name>/transcript.json`.
+Outputs go to `out/` and scratch files to `work/` in the folder you run from. Re-running `edit` on the same file reuses the cached transcript in `work/<name>/transcript.json`.
 
 ### Configure
 
