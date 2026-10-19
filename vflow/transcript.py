@@ -29,6 +29,22 @@ def load(path: Path) -> list[Word]:
     return [Word(**w) for w in json.loads(path.read_text())]
 
 
+def read_wav(path: Path):
+    """16 kHz mono PCM wav (as written by media.extract_audio) -> float32 samples.
+
+    Decoding ourselves keeps faster-whisper's PyAV decoder (and its version quirks) out of the path.
+    """
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(path), "rb") as w:
+        if w.getframerate() != 16000 or w.getnchannels() != 1 or w.getsampwidth() != 2:
+            raise ValueError("expected 16 kHz mono 16-bit wav")
+        pcm = w.readframes(w.getnframes())
+    return np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def transcribe(audio: Path, model_name: str, language: str | None, device: str = "cpu",
                report: Callable[[str, float | None], None] = lambda msg, p: None) -> list[Word]:
     from faster_whisper import WhisperModel
@@ -43,7 +59,7 @@ def transcribe(audio: Path, model_name: str, language: str | None, device: str =
     report("Transcribing", 0.0)
     model = WhisperModel(model_path, device=device, compute_type="auto")
     segments, info = model.transcribe(
-        str(audio),
+        read_wav(audio),
         language=language,
         word_timestamps=True,
         vad_filter=False,  # we want to see every word, including flubs, so the cutter can decide
