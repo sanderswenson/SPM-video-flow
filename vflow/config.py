@@ -18,6 +18,7 @@ ASPECTS = {
 class Settings:
     # Transcription
     whisper_model: str = "small.en"
+    whisper_device: str = "cpu"  # "cuda" for NVIDIA GPUs with CUDA 12 + cuDNN installed
     language: str | None = "en"
 
     # Cutting

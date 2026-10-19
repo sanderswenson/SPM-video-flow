@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import media
 from .config import Settings
-from .pipeline import VIDEO_EXTS, process, render_plan
+from .pipeline import VIDEO_EXTS, output_for, process, render_plan
 from .plan import Plan
 
 
@@ -53,8 +53,9 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "render":
         plan = Plan.load(args.workdir / "plan.json")
-        out = args.out / f"{Path(plan.source).stem}_edit.mp4"
-        render_plan(plan, args.workdir, out, s)
+        out = output_for(Path(plan.source), args.out)
+        print("  " + render_plan(plan, args.workdir, out, s))
+        print(f"  -> {out}")
         return
 
     files: list[Path] = []

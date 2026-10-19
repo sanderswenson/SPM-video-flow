@@ -6,6 +6,7 @@ import json
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 
 @dataclass
@@ -28,11 +29,20 @@ def load(path: Path) -> list[Word]:
     return [Word(**w) for w in json.loads(path.read_text())]
 
 
-def transcribe(audio: Path, model_name: str, language: str | None) -> list[Word]:
+def transcribe(audio: Path, model_name: str, language: str | None, device: str = "cpu",
+               report: Callable[[str, float | None], None] = lambda msg, p: None) -> list[Word]:
     from faster_whisper import WhisperModel
+    from faster_whisper.utils import download_model
 
-    model = WhisperModel(model_name, device="auto", compute_type="auto")
-    segments, _ = model.transcribe(
+    try:
+        model_path = download_model(model_name, local_files_only=True)
+    except Exception:
+        report(f"Downloading speech model '{model_name}' (first run only)", None)
+        model_path = download_model(model_name)
+
+    report("Transcribing", 0.0)
+    model = WhisperModel(model_path, device=device, compute_type="auto")
+    segments, info = model.transcribe(
         str(audio),
         language=language,
         word_timestamps=True,
@@ -47,6 +57,8 @@ def transcribe(audio: Path, model_name: str, language: str | None) -> list[Word]
             text = w.word.strip()
             if text:
                 words.append(Word(start=round(w.start, 3), end=round(w.end, 3), text=text, prob=round(w.probability, 3)))
+        if info.duration:
+            report("Transcribing", min(1.0, seg.end / info.duration))
     return words
 
 

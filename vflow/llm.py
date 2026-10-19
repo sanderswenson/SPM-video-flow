@@ -49,6 +49,21 @@ def available() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
 
 
+def check_key(key: str) -> str | None:
+    """Return an error message if the key doesn't work, else None."""
+    import anthropic
+
+    try:
+        anthropic.Anthropic(api_key=key).models.list(limit=1)
+    except anthropic.AuthenticationError:
+        return "That API key was rejected."
+    except anthropic.APIConnectionError:
+        return "Couldn't reach the Anthropic API. Check your internet connection."
+    except anthropic.APIStatusError as e:
+        return f"API error {e.status_code}"
+    return None
+
+
 def render_transcript(plan: Plan) -> str:
     kept = [i for i, k in enumerate(plan.keep) if k]
     sub = [plan.words[i] for i in kept]
@@ -81,7 +96,6 @@ def review(plan: Plan, s: Settings) -> EditDecision | None:
         fallbacks="default",
     )
     if response.stop_reason == "refusal" or response.parsed_output is None:
-        print(f"  ! LLM pass returned no edit (stop_reason={response.stop_reason}); keeping silence/filler cuts only")
         return None
     return response.parsed_output
 

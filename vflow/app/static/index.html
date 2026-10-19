@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vflow</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #111214; --panel: #191a1d; --panel2: #202226; --line: #2c2f34;
+    --text: #ececee; --muted: #9a9ca3; --accent: #ffe14d; --accent-ink: #1a1a1a;
+    --ok: #4ade80; --err: #f87171; --warn: #fbbf24; --info: #60a5fa;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 "Segoe UI Variable", "Segoe UI", Inter, system-ui, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--panel2); border-radius: 8px;
+    padding: 7px 12px; }
+  button:hover { border-color: #444851; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(1.05); }
+  button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  button.ghost:hover { color: var(--text); background: var(--panel2); }
+  button:disabled { opacity: .5; cursor: default; }
+  .app { display: flex; flex-direction: column; height: 100%; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+  .logo { font-weight: 800; font-size: 18px; letter-spacing: -.02em; }
+  .logo span { color: var(--accent); }
+  .ver { color: var(--muted); font-size: 12px; }
+  .grow { flex: 1; }
+  main { flex: 1; overflow: auto; padding: 20px; }
+  .wrap { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  .banner { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--radius);
+    background: var(--panel); border: 1px solid var(--line); }
+  .banner.update { border-color: #5c5020; background: #2a2614; }
+  .banner .msg { flex: 1; }
+
+  .drop { border: 2px dashed var(--line); border-radius: 14px; padding: 36px 20px; text-align: center;
+    background: var(--panel); transition: border-color .15s, background .15s; }
+  .drop.over { border-color: var(--accent); background: #24231a; }
+  .drop h2 { margin: 0 0 6px; font-size: 20px; }
+  .drop p { margin: 0 0 16px; color: var(--muted); }
+  .drop.compact { padding: 14px 20px; display: flex; align-items: center; gap: 12px; text-align: left; }
+  .drop.compact h2, .drop.compact p { margin: 0; font-size: 14px; }
+  .drop.compact .txt { flex: 1; }
+  .pathadd { display: flex; gap: 8px; max-width: 560px; margin: 12px auto 0; }
+  .pathadd input { flex: 1; }
+  .drop.compact .pathadd { margin: 0; width: 300px; }
+
+  .list-head { display: flex; align-items: center; color: var(--muted); font-size: 12px; text-transform: uppercase;
+    letter-spacing: .06em; }
+  .jobs { display: flex; flex-direction: column; gap: 10px; }
+  .job { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .job-top { display: flex; align-items: center; gap: 10px; }
+  .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--panel2);
+    color: var(--muted); white-space: nowrap; }
+  .pill.working { color: var(--info); } .pill.done { color: var(--ok); } .pill.error { color: var(--err); }
+  .pill.review { color: var(--accent); }
+  .stage { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .msg-err { color: var(--err); font-size: 13px; margin-top: 6px; white-space: pre-wrap; }
+  .bar { height: 6px; background: var(--panel2); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+  .bar > div { height: 100%; background: var(--accent); border-radius: 99px; transition: width .4s; }
+  .bar.indet > div { width: 30% !important; animation: slide 1.2s ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+  .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .post { margin-top: 12px; background: var(--panel2); border-radius: 8px; padding: 12px; font-size: 13px; }
+  .post .title { font-weight: 700; margin-bottom: 6px; }
+  .post .cap { white-space: pre-wrap; color: #d4d5d9; }
+  .post .tags { color: var(--info); margin-top: 6px; }
+
+  /* Drawer + modal */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; }
+  .scrim.open { display: block; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100%); background: var(--panel);
+    border-left: 1px solid var(--line); transform: translateX(100%); transition: transform .2s; display: flex;
+    flex-direction: column; }
+  .drawer.open { transform: none; }
+  .drawer-head { display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .drawer-head h3 { margin: 0; flex: 1; font-size: 16px; }
+  .drawer-body { padding: 16px 18px 40px; overflow: auto; display: flex; flex-direction: column; gap: 18px; }
+  fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  legend { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+  label.row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+  label.row > span:first-child { flex: 1; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: -4px; }
+  input[type=text], input[type=password], select, textarea { background: var(--bg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; width: 100%; }
+  select { width: auto; min-width: 150px; }
+  textarea { resize: vertical; min-height: 64px; }
+  input[type=range] { width: 160px; accent-color: var(--accent); }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+  input[type=color] { width: 40px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: none; padding: 1px; }
+  .inline { display: flex; gap: 8px; }
+  .ok-text { color: var(--ok); font-size: 12px; } .err-text { color: var(--err); font-size: 12px; }
+
+  .modal { position: fixed; inset: 4% 4%; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    display: none; flex-direction: column; overflow: hidden; }
+  .modal.open { display: flex; }
+  .modal-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .modal-head h3 { margin: 0; font-size: 16px; }
+  .modal-body { flex: 1; overflow: auto; padding: 18px 22px; font-size: 17px; line-height: 2.0; }
+  .modal-foot { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-top: 1px solid var(--line); }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .w { cursor: pointer; padding: 2px 3px; border-radius: 4px; }
+  .w:hover { background: var(--panel2); }
+  .w.cut { text-decoration: line-through; opacity: .55; }
+  .w.cut.filler { color: #a3a3a3; } .w.cut.retake { color: var(--warn); } .w.cut.false_start { color: #fb923c; }
+  .w.cut.stutter { color: #c084fc; } .w.cut.off_script { color: var(--err); } .w.cut.tangent { color: #22d3ee; }
+  .w.cut.manual { color: var(--info); }
+  .gap { display: inline-block; width: 1.2em; color: var(--line); }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel2);
+    border: 1px solid var(--line); padding: 9px 14px; border-radius: 8px; display: none; }
+  .toast.show { display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">v<span>flow</span></div>
+    <div class="ver" id="ver"></div>
+    <div class="grow"></div>
+    <button class="ghost" id="openOut">Output folder</button>
+    <button class="ghost" id="openSettings">Settings</button>
+  </header>
+  <main>
+    <div class="wrap">
+      <div id="updateBanner" class="banner update" hidden>
+        <div class="msg" id="updateMsg"></div>
+        <button class="primary" id="updateBtn">Install &amp; restart</button>
+      </div>
+      <div id="keyBanner" class="banner" hidden>
+        <div class="msg">Add a Claude API key to remove retakes and false starts automatically and get post copy. Without it, vflow still cuts silences and filler words.</div>
+        <button id="keyBannerBtn">Add key</button>
+      </div>
+
+      <div class="drop" id="drop">
+        <div class="txt">
+          <h2>Drop raw videos here</h2>
+          <p>vflow cuts the dead air, filler words and retakes, frames it vertically, adds captions and evens out the audio.</p>
+        </div>
+        <button class="primary" id="addBtn">Add videos</button>
+        <div class="pathadd" id="pathAdd" hidden>
+          <input type="text" id="pathInput" placeholder="Or paste a full file path and press Enter">
+        </div>
+      </div>
+
+      <div class="list-head" id="listHead" hidden>
+        <span class="grow">Queue</span>
+        <button class="ghost" id="clearBtn">Clear finished</button>
+      </div>
+      <div id="jobs" class="jobs"></div>
+    </div>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+<aside class="drawer" id="drawer" aria-label="Settings">
+  <div class="drawer-head"><h3>Settings</h3><button class="ghost" id="closeSettings">Close</button></div>
+  <div class="drawer-body">
+    <fieldset>
+      <legend>Output</legend>
+      <div class="inline"><input type="text" id="output_dir" data-key="output_dir"><button id="browseOut">Browse</button></div>
+      <label class="row"><span>Format</span>
+        <select data-key="aspect">
+          <option value="9:16">9:16 vertical (Reels, TikTok, Shorts)</option>
+          <option value="4:5">4:5 portrait (feed)</option>
+          <option value="1:1">1:1 square</option>
+          <option value="16:9">16:9 landscape</option>
+          <option value="source">Keep original</option>
+        </select></label>
+      <label class="row"><span>Framing</span>
+        <input type="range" min="0" max="1" step="0.05" data-key="crop_x" data-num></label>
+      <div class="hint">Which part of a wide shot to keep when cropping: left ← center → right.</div>
+      <label class="row"><span>Pause before rendering so I can review cuts</span><input type="checkbox" data-key="review"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Editing</legend>
+      <label class="row"><span>Pacing</span>
+        <input type="range" min="0.15" max="0.8" step="0.05" data-key="max_pause" data-num></label>
+      <div class="hint">Longest pause kept: <b id="pauseVal"></b>. Shorter is punchier.</div>
+      <label class="row"><span>Remove retakes with Claude</span><input type="checkbox" data-key="use_llm"></label>
+      <label style="display:flex;flex-direction:column;gap:6px"><span>Notes for the editor</span>
+        <textarea data-key="style_notes" placeholder="e.g. Keep it under 45 seconds. Cut the intro small talk."></textarea></label>
+      <label class="row"><span>Transcription</span>
+        <select data-key="whisper_model">
+          <option value="base.en">Fast</option>
+          <option value="small.en">Balanced</option>
+          <option value="medium.en">Accurate (slow)</option>
+          <option value="large-v3">Multilingual (slowest)</option>
+        </select></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Captions</legend>
+      <label class="row"><span>Burn in captions</span><input type="checkbox" data-key="captions"></label>
+      <label class="row"><span>Font</span>
+        <select data-key="caption_font">
+          <option value="Inter">Inter (bundled)</option>
+          <option value="Arial">Arial</option>
+          <option value="Impact">Impact</option>
+          <option value="Segoe UI">Segoe UI</option>
+          <option value="Montserrat">Montserrat</option>
+        </select></label>
+      <label class="row"><span>Highlight color</span><input type="color" data-key="caption_highlight" data-hex></label>
+      <label class="row"><span>Text color</span><input type="color" data-key="caption_color" data-hex></label>
+      <label class="row"><span>All caps</span><input type="checkbox" data-key="caption_uppercase"></label>
+      <label class="row"><span>Words on screen</span>
+        <input type="range" min="1" max="6" step="1" data-key="caption_words" data-num></label>
+      <label class="row"><span>Size</span>
+        <input type="range" min="0.03" max="0.08" step="0.005" data-key="caption_size" data-num></label>
+      <label class="row"><span>Height on screen</span>
+        <input type="range" min="0.4" max="0.92" step="0.02" data-key="caption_y" data-num></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Claude API key</legend>
+      <div class="inline"><input type="password" id="keyInput" placeholder="sk-ant-..."><button id="saveKey">Save</button></div>
+      <div id="keyStatus" class="hint"></div>
+      <div class="hint">Stored in Windows Credential Manager. Get one at console.anthropic.com.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>About</legend>
+      <div class="hint" id="aboutVer"></div>
+      <div><button id="checkUpdate">Check for updates</button> <span id="checkMsg" class="hint"></span></div>
+    </fieldset>
+  </div>
+</aside>
+
+<section class="modal" id="review" aria-label="Review cuts">
+  <div class="modal-head">
+    <h3 id="reviewTitle">Review cuts</h3>
+    <div class="grow"></div>
+    <div class="legend">
+      <span><i style="background:#a3a3a3"></i>filler</span><span><i style="background:var(--warn)"></i>retake</span>
+      <span><i style="background:#fb923c"></i>false start</span><span><i style="background:#c084fc"></i>stutter</span>
+      <span><i style="background:var(--err)"></i>off script</span><span><i style="background:var(--info)"></i>you</span>
+    </div>
+  </div>
+  <div class="modal-body" id="reviewBody"></div>
+  <div class="modal-foot">
+    <div class="hint" style="margin:0">Click a word to cut or restore it. Shift-click to apply to a whole range.</div>
+    <div class="grow"></div>
+    <span id="reviewSummary" class="hint" style="margin:0"></span>
+    <button id="reviewCancel">Close</button>
+    <button class="primary" id="reviewRender">Render</button>
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TOKEN = "__VFLOW_TOKEN__";
+const $ = (id) => document.getElementById(id);
+let state = null;
+let settingsDirty = false;
+
+async function api(path, body) {
+  const res = await fetch("/api/" + path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+const STATUS = { queued: "Queued", working: "Working", review: "Review", render_queued: "Queued", done: "Done", error: "Failed" };
+
+function jobHtml(j) {
+  const pct = j.progress == null ? null : Math.round(j.progress * 100);
+  const showBar = j.status === "working" || j.status === "queued" || j.status === "render_queued";
+  const actions = [];
+  if (j.status === "review") actions.push(`<button class="primary" data-act="review">Review cuts</button>`, `<button data-act="render">Render as is</button>`);
+  if (j.status === "done") actions.push(`<button class="primary" data-act="play">Play</button>`, `<button data-act="folder">Show in folder</button>`, `<button data-act="review">Adjust cuts</button>`);
+  if (j.status === "error") actions.push(`<button data-act="retry">Retry</button>`);
+  if (j.status !== "working") actions.push(`<button class="ghost" data-act="remove">Remove</button>`);
+  const p = j.post || {};
+  const post = j.status === "done" && p.caption ? `
+    <div class="post">
+      <div class="title">${esc(p.title)}</div>
+      <div class="cap">${esc(p.caption)}</div>
+      <div class="tags">${esc((p.hashtags || []).join(" "))}</div>
+      <div class="actions"><button data-act="copy">Copy caption</button></div>
+    </div>` : "";
+  return `
+    <div class="job" data-id="${j.id}">
+      <div class="job-top">
+        <div class="name grow" title="${esc(j.src)}">${esc(j.name)}</div>
+        <span class="pill ${j.status === "render_queued" ? "queued" : j.status}">${STATUS[j.status] || j.status}</span>
+      </div>
+      ${j.status === "error" ? `<div class="msg-err">${esc(j.message)}</div>` :
+        `<div class="stage">${esc(j.status === "done" || j.status === "review" ? j.message : j.stage + (pct != null && j.status === "working" ? ` · ${pct}%` : ""))}</div>`}
+      ${showBar ? `<div class="bar ${j.status === "working" && pct == null ? "indet" : ""}"><div style="width:${pct ?? 0}%"></div></div>` : ""}
+      ${post}
+      <div class="actions">${actions.join("")}</div>
+    </div>`;
+}
+
+let lastJobsHtml = "";
+function render() {
+  const s = state;
+  $("ver").textContent = "v" + s.version;
+  $("aboutVer").textContent = `vflow ${s.version}` + (s.updates_enabled ? "" : " (updates are off in development builds)");
+  $("keyBanner").hidden = s.has_key || !s.settings.use_llm;
+  $("pathAdd").hidden = s.native;
+
+  const u = s.update, us = s.update_state;
+  $("updateBanner").hidden = !u;
+  if (u) {
+    $("updateMsg").textContent = us.status === "downloading" ? `Downloading vflow ${u.version}… ${Math.round(us.progress * 100)}%`
+      : us.status === "installing" ? `Installing vflow ${u.version}… the app will restart.`
+      : us.status === "error" ? `Update failed: ${us.message}` : `vflow ${u.version} is available.`;
+    $("updateBtn").disabled = us.status === "downloading" || us.status === "installing";
+  }
+
+  const jobs = s.jobs;
+  $("drop").classList.toggle("compact", jobs.length > 0);
+  $("listHead").hidden = jobs.length === 0;
+  const html = jobs.map(jobHtml).join("");
+  if (html !== lastJobsHtml) { $("jobs").innerHTML = html; lastJobsHtml = html; }
+
+  if (!settingsDirty && !$("drawer").classList.contains("open")) fillSettings(s.settings);
+}
+
+async function poll() {
+  try { state = await api("state"); render(); } catch (e) { console.error(e); }
+  const busy = state && state.jobs.some(j => j.status === "working");
+  setTimeout(poll, busy ? 600 : 1500);
+}
+
+// --- adding videos ---
+$("addBtn").onclick = async () => {
+  if (!state?.native) { $("pathInput").focus(); return; }
+  const r = await api("pick", {}); if (r.skipped?.length) toast("Skipped: " + r.skipped.join(", "));
+};
+$("pathInput").addEventListener("keydown", async (e) => {
+  if (e.key !== "Enter" || !e.target.value.trim()) return;
+  const r = await api("add", { paths: [e.target.value.trim().replace(/^"|"$/g, "")] });
+  if (r.skipped?.length) toast("Not a video file: " + r.skipped.join(", ")); else e.target.value = "";
+});
+const drop = $("drop");
+["dragenter", "dragover"].forEach(ev => document.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => document.addEventListener(ev, (e) => {
+  if (ev === "dragleave" && e.relatedTarget) return;
+  e.preventDefault(); drop.classList.remove("over");
+  if (ev === "drop" && !state?.native) toast("Drag and drop works in the desktop app. Paste the file path below instead.");
+}));
+$("clearBtn").onclick = () => api("clear", {});
+$("openOut").onclick = () => api("open-output", {});
+
+// --- job actions ---
+$("jobs").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-act]"); if (!btn) return;
+  const id = btn.closest(".job").dataset.id, act = btn.dataset.act;
+  const job = state.jobs.find(j => j.id === id);
+  try {
+    if (act === "review") openReview(job);
+    else if (act === "render") await api(`jobs/${id}/render`, {});
+    else if (act === "retry") await api(`jobs/${id}/retry`, {});
+    else if (act === "remove") await api(`jobs/${id}/remove`, {});
+    else if (act === "play") await api(`jobs/${id}/open`, { what: "video" });
+    else if (act === "folder") await api(`jobs/${id}/open`, { what: "folder" });
+    else if (act === "copy") {
+      const p = job.post; await navigator.clipboard.writeText(`${p.caption}\n\n${(p.hashtags || []).join(" ")}`);
+      toast("Caption copied");
+    }
+  } catch (err) { toast(err.message); }
+});
+
+// --- review ---
+let review = null;
+async function openReview(job) {
+  const plan = await api(`jobs/${job.id}/plan`);
+  review = { id: job.id, words: plan.words, last: null };
+  $("reviewTitle").textContent = "Review cuts — " + job.name;
+  $("reviewSummary").textContent = job.message || "";
+  drawReview();
+  $("review").classList.add("open"); $("scrim").classList.add("open");
+}
+function drawReview() {
+  const out = [];
+  review.words.forEach((w, i) => {
+    if (i > 0 && w.s - review.words[i - 1].e > 1.0) out.push(`<span class="gap">⏎</span><br>`);
+    out.push(`<span class="w ${w.k ? "" : "cut " + (w.r || "manual")}" data-i="${i}" title="${w.k ? "" : (w.r || "cut").replace("_", " ")} · ${w.s.toFixed(1)}s">${esc(w.t)}</span> `);
+  });
+  $("reviewBody").innerHTML = out.join("");
+}
+let saveTimer = null;
+$("reviewBody").addEventListener("click", (e) => {
+  const el = e.target.closest(".w"); if (!el) return;
+  const i = +el.dataset.i;
+  const target = !review.words[i].k;
+  const [a, b] = e.shiftKey && review.last != null ? [Math.min(i, review.last), Math.max(i, review.last)] : [i, i];
+  for (let j = a; j <= b; j++) { review.words[j].k = target; review.words[j].r = target ? "" : "manual"; }
+  review.last = i;
+  drawReview();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveReview, 250);
+});
+async function saveReview() {
+  const r = await api(`jobs/${review.id}/plan`, { keep: review.words.map(w => w.k) });
+  $("reviewSummary").textContent = r.summary;
+}
+function closeReview() { $("review").classList.remove("open"); if (!$("drawer").classList.contains("open")) $("scrim").classList.remove("open"); review = null; }
+$("reviewCancel").onclick = async () => { clearTimeout(saveTimer); if (review) await saveReview(); closeReview(); };
+$("reviewRender").onclick = async () => {
+  clearTimeout(saveTimer); await saveReview(); await api(`jobs/${review.id}/render`, {}); closeReview();
+};
+
+// --- settings ---
+function fillSettings(s) {
+  document.querySelectorAll("[data-key]").forEach(el => {
+    const v = s[el.dataset.key];
+    if (el.type === "checkbox") el.checked = !!v;
+    else if (el.dataset.hex !== undefined) el.value = "#" + String(v).replace("#", "");
+    else el.value = v ?? "";
+  });
+  $("pauseVal").textContent = Number(s.max_pause).toFixed(2) + "s";
+}
+let settingsTimer = null;
+document.querySelectorAll("[data-key]").forEach(el => {
+  el.addEventListener(el.tagName === "TEXTAREA" || el.type === "text" ? "input" : "change", () => {
+    settingsDirty = true;
+    if (el.dataset.key === "max_pause") $("pauseVal").textContent = Number(el.value).toFixed(2) + "s";
+    clearTimeout(settingsTimer);
+    settingsTimer = setTimeout(async () => {
+      const body = {};
+      document.querySelectorAll("[data-key]").forEach(f => {
+        let v = f.type === "checkbox" ? f.checked : f.value;
+        if (f.dataset.num !== undefined) v = Number(v);
+        if (f.dataset.hex !== undefined) v = v.replace("#", "").toUpperCase();
+        body[f.dataset.key] = v;
+      });
+      try { state.settings = await api("settings", body); } catch (err) { toast(err.message); }
+      settingsDirty = false;
+    }, 300);
+  });
+});
+document.querySelector('[data-key="max_pause"]').addEventListener("input", (e) => $("pauseVal").textContent = Number(e.target.value).toFixed(2) + "s");
+
+function openSettings() { fillSettings(state.settings); $("drawer").classList.add("open"); $("scrim").classList.add("open"); }
+function closeSettings() { $("drawer").classList.remove("open"); if (!review) $("scrim").classList.remove("open"); }
+$("openSettings").onclick = openSettings;
+$("keyBannerBtn").onclick = () => { openSettings(); $("keyInput").focus(); };
+$("closeSettings").onclick = closeSettings;
+$("scrim").onclick = () => { if (review) return; closeSettings(); };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (review) $("reviewCancel").click(); else closeSettings(); } });
+$("browseOut").onclick = async () => {
+  if (!state.native) { $("output_dir").focus(); return; }
+  const r = await api("pick-folder", {}); if (r.folder) { $("output_dir").value = r.folder; state.settings.output_dir = r.folder; }
+};
+$("saveKey").onclick = async () => {
+  const st = $("keyStatus"); st.className = "hint"; st.textContent = "Checking…";
+  try {
+    const r = await api("key", { key: $("keyInput").value });
+    if (r.ok) { st.className = "ok-text"; st.textContent = $("keyInput").value ? "Saved. Retake removal is on." : "Key removed."; $("keyInput").value = ""; }
+    else { st.className = "err-text"; st.textContent = r.error; }
+  } catch (err) { st.className = "err-text"; st.textContent = err.message; }
+};
+$("checkUpdate").onclick = async () => {
+  $("checkMsg").textContent = "Checking…";
+  try { const r = await api("update/check", {}); $("checkMsg").textContent = r.update ? `Version ${r.update.version} is available.` : "You're up to date."; }
+  catch (err) { $("checkMsg").textContent = "Couldn't check: " + err.message; }
+};
+$("updateBtn").onclick = async () => { const r = await api("update/install", {}); if (!r.ok) toast(r.error); };
+
+poll();
+</script>
+</body>
+</html>
