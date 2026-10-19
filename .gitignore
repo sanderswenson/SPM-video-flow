@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+inbox/
+out/
+work/
+*.mp4
+*.mov
+*.mkv
+*.wav

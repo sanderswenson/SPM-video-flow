@@ -1,0 +1,23 @@
+[project]
+name = "vflow"
+version = "0.1.0"
+description = "Turn raw, uncut talking-head footage into postable short-form video."
+requires-python = ">=3.10"
+dependencies = [
+    "faster-whisper>=1.1",
+    "anthropic>=1.15",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+vflow = "vflow.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["vflow"]
