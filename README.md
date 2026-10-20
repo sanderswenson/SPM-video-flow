@@ -7,8 +7,8 @@ Drop in an uncut talking-head clip. vflow:
 3. **Cuts repeated lines**: restarts, chains of false starts and whole re-recorded stretches, keeping the last take. This runs
    locally and needs no API key. A **Claude editor pass** then refines it (subtle retakes, off-camera chatter, tangents),
    **fixes the captions** (spoken numbers become "$5,500", misheard words, casing), picks a **hook** (a cold-open of the
-   strongest line plus a title over the first seconds), places **callout cards** for the key numbers and any **B-roll**
-   photos you provide, writes the **call to action**, and the post title, caption and hashtags.
+   strongest line plus a title over the first seconds), places **callout cards** for the key numbers and **B-roll**
+   photos (yours, or stock photos it searches for), writes the **call to action**, and the post title, caption and hashtags.
 4. **Reframes** to 9:16 (or 4:5, 1:1, 16:9) and **keeps the speaker in frame**: a landscape clip is sampled a few times
    a second, the face is located, and every shot gets its own crop: static when the speaker stays put, a slow pan when
    they move. A subtle punch-in alternates at hard cuts so jump cuts read as intentional.
@@ -106,6 +106,17 @@ the cached transcript in `work/<name>/transcript.json` and the speaker positions
 
 Copy `vflow.example.toml` to `vflow.toml`. It covers pause length, framing, caption font, colors and position, the
 extras, aspect, loudness target and Whisper model size. CLI flags override the file.
+
+### Stock photos for B-roll
+
+If you don't have photos of your own (`--broll` / the B-roll folder is empty), the editor pass proposes a few
+stock-photo searches tied to moments in the talk ("suburban house exterior" where the house is mentioned), and vflow
+fetches one photo per moment from [Pexels](https://www.pexels.com/api/) or
+[Unsplash](https://unsplash.com/developers), both free. Paste the key in the app's Settings under **Stock photos**
+(stored in the credential store, like the Claude key), or for the command line set `VFLOW_STOCK_API_KEY`
+(or `PEXELS_API_KEY` / `UNSPLASH_ACCESS_KEY`), or put `stock_api_key` in `vflow.toml`; `stock_provider` picks the
+service. Photos are cached under `work/<name>/broll/` so re-renders don't refetch, and the photographers' credits are
+appended to the post copy `.txt`. Your own images always take precedence, and without a key nothing is fetched.
 
 ## How it works
 

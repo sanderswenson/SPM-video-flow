@@ -1,4 +1,4 @@
-"""Where the app keeps things: per-user folders, saved settings, and the API key."""
+"""Where the app keeps things: per-user folders, saved settings, and the API keys."""
 
 from __future__ import annotations
 
@@ -12,7 +12,13 @@ from ..config import Settings
 
 APP = "vflow"
 KEYRING_SERVICE = "vflow"
-KEYRING_USER = "anthropic_api_key"
+# kind -> (keyring user name, environment variable the pipeline reads, fallback file name)
+SECRETS = {
+    "anthropic": ("anthropic_api_key", "ANTHROPIC_API_KEY", "api_key"),
+    "stock": ("stock_api_key", "VFLOW_STOCK_API_KEY", "stock_api_key"),
+}
+# Pipeline settings that must never land in settings.json or the UI state.
+SECRET_SETTINGS = {"stock_api_key"}
 
 
 def data_dir() -> Path:
@@ -60,14 +66,15 @@ class AppSettings:
             return
         self.output_dir = data.pop("output_dir", self.output_dir)
         self.review = bool(data.pop("review", self.review))
-        known = {f.name for f in fields(Settings)}
+        known = {f.name for f in fields(Settings)} - SECRET_SETTINGS
         self.pipeline.update({k: v for k, v in data.items() if k in known})
 
     def save(self) -> None:
         self.path.write_text(json.dumps(self.to_dict(), indent=1))
 
     def to_dict(self) -> dict:
-        return {**asdict(self.pipeline), "output_dir": self.output_dir, "review": self.review}
+        pipeline = {k: v for k, v in asdict(self.pipeline).items() if k not in SECRET_SETTINGS}
+        return {**pipeline, "output_dir": self.output_dir, "review": self.review}
 
     def update(self, values: dict) -> None:
         values = dict(values)
@@ -75,7 +82,7 @@ class AppSettings:
             self.output_dir = str(values.pop("output_dir"))
         if "review" in values:
             self.review = bool(values.pop("review"))
-        known = {f.name for f in fields(Settings)}
+        known = {f.name for f in fields(Settings)} - SECRET_SETTINGS
         current = asdict(self.pipeline)
         clean = {}
         for k, v in values.items():
@@ -93,50 +100,62 @@ class AppSettings:
         self.save()
 
 
-# --- API key: OS credential store (Windows Credential Manager), falling back to a file. ---
+# --- secrets: OS credential store (Windows Credential Manager), falling back to a file. ---
 
-def _key_file() -> Path:
-    return data_dir() / "api_key"
-
-
-def get_api_key() -> str | None:
+def get_secret(kind: str) -> str | None:
+    user, _, file = SECRETS[kind]
     try:
         import keyring
 
-        key = keyring.get_password(KEYRING_SERVICE, KEYRING_USER)
-        if key:
-            return key
+        value = keyring.get_password(KEYRING_SERVICE, user)
+        if value:
+            return value
     except Exception:
         pass
-    f = _key_file()
+    f = data_dir() / file
     return f.read_text().strip() if f.exists() else None
 
 
-def set_api_key(key: str | None) -> None:
+def set_secret(kind: str, value: str | None) -> None:
+    user, env, file = SECRETS[kind]
+    f = data_dir() / file
     try:
         import keyring
 
-        if key:
-            keyring.set_password(KEYRING_SERVICE, KEYRING_USER, key)
+        if value:
+            keyring.set_password(KEYRING_SERVICE, user, value)
         else:
             try:
-                keyring.delete_password(KEYRING_SERVICE, KEYRING_USER)
+                keyring.delete_password(KEYRING_SERVICE, user)
             except Exception:
                 pass
-        _key_file().unlink(missing_ok=True)
+        f.unlink(missing_ok=True)
     except Exception:
-        if key:
-            _key_file().write_text(key)
+        if value:
+            f.write_text(value)
         else:
-            _key_file().unlink(missing_ok=True)
-    if key:
-        os.environ["ANTHROPIC_API_KEY"] = key
+            f.unlink(missing_ok=True)
+    if value:
+        os.environ[env] = value
     else:
-        os.environ.pop("ANTHROPIC_API_KEY", None)
+        os.environ.pop(env, None)
+
+
+def get_api_key() -> str | None:
+    return get_secret("anthropic")
+
+
+def set_api_key(key: str | None) -> None:
+    set_secret("anthropic", key)
+
+
+def set_stock_key(key: str | None) -> None:
+    set_secret("stock", key)
 
 
 def load_api_key_into_env() -> None:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        key = get_api_key()
-        if key:
-            os.environ["ANTHROPIC_API_KEY"] = key
+    for kind, (_, env, _) in SECRETS.items():
+        if not os.environ.get(env):
+            value = get_secret(kind)
+            if value:
+                os.environ[env] = value

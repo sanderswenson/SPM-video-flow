@@ -38,8 +38,13 @@ line (2-7 seconds of speech, from the kept words, usually the result or payoff) 
 video starts from the top; -1 for both if nothing fits.
 5. callouts: up to 4 short on-screen cards (max 5 words / 28 characters) at the moments that carry the numbers \
 or the key claim, e.g. "$5,500 in repairs" at the words where that figure is said. Only where they add punch.
-6. broll: if image files are listed, place each relevant one at the word where it should appear (at most once \
-each, not in the first 3 seconds, at least 8 seconds apart). Skip images that don't fit. Empty list if none.
+6. B-roll: a full-frame photo shown for a few seconds while the speaker keeps talking. Not in the first \
+3 seconds, at least 8 seconds apart, never at a moment where the speaker's face is the point.
+   - broll: if image files are listed, place each relevant one at the word where it should appear (at most \
+once each). Skip images that don't fit. Empty list if none.
+   - broll_queries: if stock photos are available, propose up to 4 stock-photo searches, each a concrete 2-5 \
+word visual subject ("suburban house exterior", "paint roller fresh wall", "backyard bark mulch"), at the word \
+where the photo should appear. Prefer moments that name a place, an object or an action. Empty list otherwise.
 7. cta: a call to action for the last seconds, max 6 words, matching the content ("Follow for more rental \
 math", "Comment 'walkthrough' for the checklist"), or the default given if it fits.
 8. Post copy: a short hook title, an Instagram caption in the speaker's voice (1-3 short paragraphs, no \
@@ -71,6 +76,11 @@ class BrollCue(BaseModel):
     image: str = Field(description="one of the listed image file names, exactly")
 
 
+class BrollQuery(BaseModel):
+    first_word: int = Field(description="word index where the photo should appear")
+    query: str = Field(description="2-5 word stock photo search, a concrete visual subject")
+
+
 class EditDecision(BaseModel):
     drops: list[DropRange]
     restores: list[Range]
@@ -80,6 +90,7 @@ class EditDecision(BaseModel):
     hook_last_word: int
     callouts: list[Callout]
     broll: list[BrollCue]
+    broll_queries: list[BrollQuery]
     cta: str
     title: str
     caption: str
@@ -128,7 +139,7 @@ def render_transcript(plan: Plan) -> str:
     return "\n".join(lines)
 
 
-def review(plan: Plan, s: Settings, broll_images: list[str] | None = None) -> EditDecision | None:
+def review(plan: Plan, s: Settings, broll_images: list[str] | None = None, stock: bool = False) -> EditDecision | None:
     import anthropic
 
     client = anthropic.Anthropic()
@@ -138,6 +149,8 @@ def review(plan: Plan, s: Settings, broll_images: list[str] | None = None) -> Ed
         "Transcript:\n" + render_transcript(plan)
     )
     user += "\n\nAvailable B-roll images: " + (", ".join(broll_images) if broll_images else "none")
+    user += ("\nStock photos: available, propose broll_queries." if stock
+             else "\nStock photos: not available, return an empty broll_queries list.")
     user += f"\nDefault call to action: {s.cta!r}" if s.cta else "\nNo call to action wanted: return an empty cta."
     if not s.hook:
         user += "\nNo cold open wanted: return -1 for the hook words (still write hook_text)."
@@ -191,6 +204,7 @@ def apply(plan: Plan, decision: EditDecision, broll_images: list[str] | None = N
             for i in range(lo + 1, hi + 1):
                 plan.words[i].display = ""
 
+    n = len(plan.words)
     ov = plan.overlays
     if decision.hook_text.strip():
         ov["hook_text"] = decision.hook_text.strip()[:60]
@@ -204,7 +218,9 @@ def apply(plan: Plan, decision: EditDecision, broll_images: list[str] | None = N
     ov["callouts"] = callouts
     allowed = set(broll_images or [])
     ov["broll"] = [{"word": b.first_word, "image": b.image} for b in decision.broll
-                   if b.image in allowed and 0 <= b.first_word < len(plan.words)]
+                   if b.image in allowed and 0 <= b.first_word < n]
+    ov["broll_queries"] = [{"word": q.first_word, "query": q.query.strip()[:60]} for q in decision.broll_queries[:4]
+                           if q.query.strip() and 0 <= q.first_word < n]
     ov["cta"] = decision.cta.strip()[:40]
 
     plan.post = {

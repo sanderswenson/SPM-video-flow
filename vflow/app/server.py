@@ -16,7 +16,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Callable
 
-from .. import __version__, llm
+from .. import __version__, llm, stock
 from . import store
 from .jobs import JobManager
 
@@ -39,6 +39,7 @@ class App:
             "jobs": self.jobs.snapshot(),
             "settings": self.settings.to_dict(),
             "has_key": llm.available(),
+            "has_stock_key": stock.available(self.settings.pipeline),
             "native": self.pick_files is not None,
         }
 
@@ -67,6 +68,14 @@ class App:
                     if err:
                         return {"ok": False, "error": err}
                 store.set_api_key(key or None)
+                return {"ok": True}
+            case "POST", ["stock-key"]:
+                key = (body.get("key") or "").strip()
+                if key:
+                    err = stock.check_key(self.settings.pipeline.stock_provider, key)
+                    if err:
+                        return {"ok": False, "error": err}
+                store.set_stock_key(key or None)
                 return {"ok": True}
             case "POST", ["clear"]:
                 self.jobs.clear_finished()

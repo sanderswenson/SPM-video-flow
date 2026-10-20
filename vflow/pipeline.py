@@ -10,7 +10,7 @@ import hashlib
 from pathlib import Path
 from typing import Callable
 
-from . import captions, framing, llm, media, render, transcript
+from . import captions, framing, llm, media, render, stock, transcript
 from .config import Settings
 from .plan import Plan, Shot, drop_fillers, drop_repeats, remap, shots, summary, total_duration, word_times
 
@@ -89,7 +89,7 @@ def make_plan(src: Path, wd: Path, s: Settings, transcript_path: Path | None = N
     if llm_on:
         report("Editor pass", None)
         images = [p.name for p in broll_images(s)]
-        decision = llm.review(plan, s, images)
+        decision = llm.review(plan, s, images, stock=not images and stock.available(s))
         if decision is None:
             report("Editor pass declined; keeping the automatic cuts only", None)
         else:
@@ -123,30 +123,47 @@ def overlay_events(plan: Plan, shot_list: list[Shot], s: Settings, total: float)
     return out
 
 
-def broll_cues(plan: Plan, shot_list: list[Shot], s: Settings, total: float) -> list[render.BrollCue]:
+def broll_cues(plan: Plan, shot_list: list[Shot], s: Settings, total: float, wd: Path,
+               size: tuple[int, int]) -> tuple[list[render.BrollCue], list[str]]:
+    """Where to cut away to an image, and the photo credits to publish.
+
+    The creator's own images (broll_dir) win. Without any, the editor pass's stock-photo queries are
+    fetched (and cached under the work folder) when a stock API key is configured.
+    """
     images = broll_images(s)
-    if not images:
-        return []
-    by_name = {p.name: p for p in images}
     times = word_times(plan, shot_list)
     earliest, latest = 3.0, total - (s.cta_seconds if s.cta else 0.0) - 1.0
-    wanted: list[tuple[float, Path]] = []
-    for cue in plan.overlays.get("broll", []):
-        if cue["image"] in by_name and cue["word"] in times:
-            wanted.append((times[cue["word"]][0], by_name[cue["image"]]))
-    if not wanted:  # no editor decisions: spread the images out evenly
-        n = min(len(images), max(1, int((latest - earliest) // 15)))
-        wanted = [(earliest + (latest - earliest) * (k + 1) / (n + 1), images[k]) for k in range(n)]
+    wanted: list[tuple[float, Path, str]] = []  # start, image, credit
+    if images:
+        by_name = {p.name: p for p in images}
+        for cue in plan.overlays.get("broll", []):
+            if cue["image"] in by_name and cue["word"] in times:
+                wanted.append((times[cue["word"]][0], by_name[cue["image"]], ""))
+        if not wanted:  # no editor decisions: spread the images out evenly
+            n = min(len(images), max(1, int((latest - earliest) // 15)))
+            wanted = [(earliest + (latest - earliest) * (k + 1) / (n + 1), images[k], "") for k in range(n)]
+    else:
+        queries = [q for q in plan.overlays.get("broll_queries", []) if q.get("word") in times and q.get("query")]
+        if queries and stock.available(s):
+            photos = stock.fetch([q["query"] for q in queries], s, wd / "broll", stock.orientation_for(size))
+            for q in queries:
+                if (photo := photos.get(q["query"].strip())) is not None:
+                    wanted.append((times[q["word"]][0], photo.path, photo.credit))
     cues: list[render.BrollCue] = []
+    credits: list[str] = []
+    used: set[Path] = set()
     last_end = -10.0
-    for start, image in sorted(wanted):
+    for start, image, credit in sorted(wanted, key=lambda w: w[0]):
         start = max(start, earliest)
         dur = min(s.broll_seconds, latest - start)
-        if dur < 1.0 or start < last_end + 4.0:
+        if dur < 1.0 or start < last_end + 4.0 or image in used:
             continue
+        used.add(image)
         cues.append((round(start, 3), round(dur, 3), image))
+        if credit and credit not in credits:
+            credits.append(credit)
         last_end = start + dur
-    return cues
+    return cues, credits
 
 
 def render_plan(plan: Plan, wd: Path, out: Path, s: Settings, report: Report = print_report) -> str:
@@ -173,19 +190,21 @@ def render_plan(plan: Plan, wd: Path, out: Path, s: Settings, report: Report = p
     if s.captions:
         caps = wd / "captions.ass"
         captions.write(remap(plan, shot_list), size, s, caps, overlay_events(plan, shot_list, s, total))
+    cues, credits = broll_cues(plan, shot_list, s, total, wd, size)
 
     report("Cutting", 0.0)
     listing = render.cut_segments(src, shot_list, framings, size, info, s, wd, lambda p: report("Cutting", p))
     report("Rendering", 0.0)
     out.parent.mkdir(parents=True, exist_ok=True)
     render.final(listing, info, size, s, caps, out, total, lambda p: report("Rendering", p),
-                 broll=broll_cues(plan, shot_list, s, total), music=pick_music(s, src))
+                 broll=cues, music=pick_music(s, src))
 
-    if plan.post:
+    if plan.post or credits:
         p = plan.post
-        out.with_suffix(".txt").write_text(
-            f"{p.get('title', '')}\n\n{p.get('caption', '')}\n\n{' '.join(p.get('hashtags', []))}\n", encoding="utf-8"
-        )
+        text = f"{p.get('title', '')}\n\n{p.get('caption', '')}\n\n{' '.join(p.get('hashtags', []))}\n"
+        if credits:
+            text += "\nPhotos: " + ", ".join(credits) + "\n"
+        out.with_suffix(".txt").write_text(text, encoding="utf-8")
     return summary(plan, shot_list)
 
 

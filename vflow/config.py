@@ -61,6 +61,8 @@ class Settings:
     callouts: bool = True  # big on-screen number/keyword cards where the editor pass suggests them
     broll_dir: str = ""  # folder of images to cut away to; the editor pass decides where they go
     broll_seconds: float = 2.5
+    stock_provider: str = "pexels"  # pexels | unsplash: stock photos for B-roll when the folder is empty
+    stock_api_key: str = ""  # or set VFLOW_STOCK_API_KEY / PEXELS_API_KEY / UNSPLASH_ACCESS_KEY; the app uses the keyring
     music: str = ""  # audio file (or a folder of them) for a background bed, ducked under speech
     music_db: float = -20.0  # music level relative to the speech
     cta: str = "Follow for more"  # end card text; empty = no end card (the editor pass may tailor it)

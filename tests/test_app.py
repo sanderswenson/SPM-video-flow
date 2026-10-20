@@ -61,6 +61,27 @@ def test_settings_are_coerced_and_persisted(server):
     assert "bogus" not in saved
 
 
+def test_stock_key_is_saved_outside_settings(server, monkeypatch):
+    app, port = server
+    monkeypatch.delenv("VFLOW_STOCK_API_KEY", raising=False)
+    monkeypatch.setattr("vflow.stock.check_key", lambda provider, key: None)
+    # No OS credential store in tests: force the file fallback inside the temp data dir.
+    monkeypatch.setattr("keyring.set_password", lambda *a: (_ for _ in ()).throw(RuntimeError("no keyring")))
+    monkeypatch.setattr("keyring.get_password", lambda *a: (_ for _ in ()).throw(RuntimeError("no keyring")))
+    status, body = request(port, "POST", "/api/stock-key", {"key": "pexels-key"}, token=app.token)
+    assert status == 200 and json.loads(body)["ok"]
+    state = json.loads(request(port, "GET", "/api/state", token=app.token)[1])
+    assert state["has_stock_key"] is True
+    assert "stock_api_key" not in state["settings"]
+    request(port, "POST", "/api/settings", {"stock_api_key": "leak", "stock_provider": "unsplash"}, token=app.token)
+    saved = json.loads(app.settings.path.read_text())
+    assert "stock_api_key" not in saved and saved["stock_provider"] == "unsplash"
+    # The key itself lives in the data dir's fallback file, not in settings.json.
+    assert (app.settings.path.parent / "stock_api_key").read_text() == "pexels-key"
+    status, body = request(port, "POST", "/api/stock-key", {"key": ""}, token=app.token)
+    assert json.loads(body)["ok"] and json.loads(request(port, "GET", "/api/state", token=app.token)[1])["has_stock_key"] is False
+
+
 def test_add_skips_non_videos(server, tmp_path):
     app, port = server
     (tmp_path / "notes.txt").write_text("x")

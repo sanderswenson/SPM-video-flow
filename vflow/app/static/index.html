@@ -242,6 +242,18 @@
     </fieldset>
 
     <fieldset>
+      <legend>Stock photos for B-roll</legend>
+      <label class="row"><span>Provider</span>
+        <select data-key="stock_provider">
+          <option value="pexels">Pexels</option>
+          <option value="unsplash">Unsplash</option>
+        </select></label>
+      <div class="inline"><input type="password" id="stockKeyInput" placeholder="API key"><button id="saveStockKey">Save</button></div>
+      <div id="stockKeyStatus" class="hint"></div>
+      <div class="hint">When the B-roll folder is empty, the editor pass picks search terms and one photo per moment is fetched. Free keys at pexels.com/api or unsplash.com/developers. Photo credits are added to the post copy.</div>
+    </fieldset>
+
+    <fieldset>
       <legend>Claude API key</legend>
       <div class="inline"><input type="password" id="keyInput" placeholder="sk-ant-..."><button id="saveKey">Save</button></div>
       <div id="keyStatus" class="hint"></div>
@@ -473,6 +485,14 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (revi
 $("browseOut").onclick = async () => {
   if (!state.native) { $("output_dir").focus(); return; }
   const r = await api("pick-folder", {}); if (r.folder) { $("output_dir").value = r.folder; state.settings.output_dir = r.folder; }
+};
+$("saveStockKey").onclick = async () => {
+  const st = $("stockKeyStatus"); st.className = "hint"; st.textContent = "Checking…";
+  try {
+    const r = await api("stock-key", { key: $("stockKeyInput").value });
+    if (r.ok) { st.className = "ok-text"; st.textContent = $("stockKeyInput").value ? "Saved. Stock B-roll is on." : "Key removed."; $("stockKeyInput").value = ""; }
+    else { st.className = "err-text"; st.textContent = r.error; }
+  } catch (err) { st.className = "err-text"; st.textContent = err.message; }
 };
 $("saveKey").onclick = async () => {
   const st = $("keyStatus"); st.className = "hint"; st.textContent = "Checking…";
