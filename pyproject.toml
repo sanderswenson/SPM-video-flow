@@ -9,6 +9,8 @@ dependencies = [
     "pydantic>=2",
     "pywebview>=5",
     "keyring>=25",
+    "numpy",
+    "opencv-python-headless>=4.8,<5",  # 5.x no longer bundles the Haar cascades used for framing
 ]
 
 [project.optional-dependencies]

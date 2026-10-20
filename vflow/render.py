@@ -1,4 +1,4 @@
-"""Render a plan: cut segments, join them, reframe, burn captions, normalize loudness."""
+"""Render a plan: cut and frame each shot, join them, add captions, B-roll and music, normalize loudness."""
 
 from __future__ import annotations
 
@@ -14,16 +14,20 @@ from typing import Callable
 
 from . import media
 from .config import Settings
+from .framing import Framing
 from .media import MediaInfo
+from .plan import Shot
 
 FADE = 0.012  # seconds of audio fade at every cut, kills clicks without being audible
+BROLL_FADE = 0.3
 
 Progress = Callable[[float], None]
+BrollCue = tuple[float, float, Path]  # start on the edited timeline, duration, image file
 
 
-def cut_segments(src: Path, segs: list[tuple[float, float]], info: MediaInfo, s: Settings, workdir: Path,
-                 on_progress: Progress = lambda p: None) -> Path:
-    """Encode each kept range to an intermediate file and write a concat list.
+def cut_segments(src: Path, shots: list[Shot], framings: list[Framing], size: tuple[int, int], info: MediaInfo,
+                 s: Settings, workdir: Path, on_progress: Progress = lambda p: None) -> Path:
+    """Encode each shot, already framed to the output size, to an intermediate file and write a concat list.
 
     Intermediates use near-lossless H.264 + PCM audio so the join is sample-exact
     (AAC priming would add tiny gaps at every cut).
@@ -35,16 +39,17 @@ def cut_segments(src: Path, segs: list[tuple[float, float]], info: MediaInfo, s:
     fps = s.fps or info.fps
 
     def one(i: int) -> str:
-        a, b = segs[i]
-        dur = b - a
+        sh, fr = shots[i], framings[i]
+        dur = sh.duration
         # Floor the seek so float error can never push it past the first frame's timestamp.
-        seek = math.floor(a * 1e6) / 1e6
+        seek = math.floor(sh.start * 1e6) / 1e6
         name = f"{i:04d}.mov"
         fade = min(FADE, dur / 4)
         media.run([
             "-ss", f"{seek:.6f}", "-i", str(src), "-t", f"{dur:.6f}",
             "-map", "0:v:0", "-map", "0:a:0",
-            "-vf", f"fps={fps}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p",
+            "-vf", f"fps={fps},{fr.filter(size)},setsar=1",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p",
             "-af", f"afade=t=in:d={fade:.4f},afade=t=out:st={dur - fade:.4f}:d={fade:.4f}",
             "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2", "-video_track_timescale", "90000",
             str(segdir / name),
@@ -53,9 +58,9 @@ def cut_segments(src: Path, segs: list[tuple[float, float]], info: MediaInfo, s:
 
     workers = max(1, (os.cpu_count() or 2) // 2)
     with ThreadPoolExecutor(workers) as pool:
-        futures = [pool.submit(one, i) for i in range(len(segs))]
+        futures = [pool.submit(one, i) for i in range(len(shots))]
         for done, _ in enumerate(as_completed(futures), 1):
-            on_progress(done / len(segs))
+            on_progress(done / len(shots))
         names = [f.result() for f in futures]
 
     # Relative paths: resolved against the list's folder, and no drive letters/backslashes to escape.
@@ -76,31 +81,41 @@ def measure_loudness(listing: Path, target: float) -> dict:
     return json.loads(match.group(0))
 
 
-def crop_filter(info: MediaInfo, size: tuple[int, int], s: Settings) -> str:
-    src_w, src_h = info.display_size
-    out_w, out_h = size
-    if s.aspect == "source":
-        return f"scale={out_w}:{out_h}:flags=lanczos"
-    target = out_w / out_h
-    if src_w / src_h > target:
-        cw, ch = round(src_h * target / 2) * 2, src_h
-    else:
-        cw, ch = src_w, round(src_w / target / 2) * 2
-    x = round((src_w - cw) * min(max(s.crop_x, 0), 1))
-    y = round((src_h - ch) * min(max(s.crop_y, 0), 1))
-    return f"crop={cw}:{ch}:{x}:{y},scale={out_w}:{out_h}:flags=lanczos"
+def _f(v: float) -> str:
+    return f"{v:.3f}"
 
 
 def final(listing: Path, info: MediaInfo, size: tuple[int, int], s: Settings, captions: Path | None, out: Path,
-          total: float, on_progress: Progress = lambda p: None) -> None:
+          total: float, on_progress: Progress = lambda p: None, broll: list[BrollCue] | None = None,
+          music: Path | None = None) -> None:
     m = measure_loudness(listing, s.loudness)
     loud = (
         f"loudnorm=I={s.loudness}:TP=-1.5:LRA=11:measured_I={m['input_i']}:measured_TP={m['input_tp']}"
         f":measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true"
     )
-
     workdir = listing.parent
-    vf = [crop_filter(info, size, s), "setsar=1"]
+    ow, oh = size
+    fps = s.fps or info.fps
+    inputs = ["-f", "concat", "-safe", "0", "-i", listing.name]
+    n_inputs = 1
+    graph: list[str] = []
+
+    # --- video: B-roll cutaways (slow push-in, faded) over the talking head, then captions ---
+    vlabel = "[0:v]"
+    for k, (start, dur, image) in enumerate(broll or []):
+        idx, n_inputs = n_inputs, n_inputs + 1
+        inputs += ["-loop", "1", "-framerate", str(fps), "-t", _f(dur), "-i", str(image.resolve())]
+        frames = max(1, round(dur * fps))
+        fade = min(BROLL_FADE, dur / 3)
+        graph.append(
+            f"[{idx}:v]scale={ow}:{oh}:force_original_aspect_ratio=increase,crop={ow}:{oh},"
+            f"zoompan=z='1+0.07*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={ow}x{oh}:fps={fps},"
+            f"format=yuva420p,fade=t=in:st=0:d={_f(fade)}:alpha=1,fade=t=out:st={_f(dur - fade)}:d={_f(fade)}:alpha=1,"
+            f"setpts=PTS-STARTPTS+{_f(start)}/TB[b{k}]"
+        )
+        graph.append(f"{vlabel}[b{k}]overlay=eof_action=pass:repeatlast=0:enable='between(t,{_f(start)},{_f(start + dur)})'[v{k}]")
+        vlabel = f"[v{k}]"
+    vchain = []
     if captions is not None:
         ass = f"ass={captions.name}"
         fonts = Path(__file__).resolve().parent / "fonts"
@@ -108,14 +123,30 @@ def final(listing: Path, info: MediaInfo, size: tuple[int, int], s: Settings, ca
             # Copied next to the work files so the filter can use a relative path (no "C:" to escape).
             shutil.copytree(fonts, workdir / "fonts", dirs_exist_ok=True)
             ass += ":fontsdir=fonts"
-        vf.append(ass)
-    vf.append("format=yuv420p")
+        vchain.append(ass)
+    vchain.append("format=yuv420p")
+    graph.append(f"{vlabel}{','.join(vchain)}[vout]")
+
+    # --- audio: normalized speech, optionally with a music bed ducked under it ---
+    graph.append(f"[0:a]{loud},aresample=48000[voice]")
+    alabel = "[voice]"
+    if music is not None and total > 2:
+        idx, n_inputs = n_inputs, n_inputs + 1
+        inputs += ["-stream_loop", "-1", "-i", str(music.resolve())]
+        fade_out = min(2.5, total / 3)
+        graph.append(
+            f"[{idx}:a]atrim=0:{_f(total)},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo,"
+            f"afade=t=in:d=1,afade=t=out:st={_f(total - fade_out)}:d={_f(fade_out)},volume={s.music_db}dB[music]"
+        )
+        graph.append("[voice]asplit[voice1][voice2]")
+        graph.append("[music][voice2]sidechaincompress=threshold=0.02:ratio=8:attack=30:release=500[ducked]")
+        graph.append("[voice1][ducked]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.89:level=false[aout]")
+        alabel = "[aout]"
 
     media.run_with_progress(
-        ["-f", "concat", "-safe", "0", "-i", listing.name,
-         "-vf", ",".join(vf), "-af", f"{loud},aresample=48000",
+        [*inputs, "-filter_complex", ";".join(graph), "-map", "[vout]", "-map", alabel,
          "-c:v", "libx264", "-preset", s.preset, "-crf", str(s.crf), "-profile:v", "high",
-         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-t", _f(total),
          str(out.resolve())],
         total, on_progress, cwd=workdir,
     )

@@ -8,14 +8,18 @@ whisper_model = "small.en"
 max_pause = 0.35        # longest silence left in the edit, seconds. Lower = snappier.
 pad_before = 0.06
 pad_after = 0.12
+cut_repeats = true      # drop earlier takes of repeated lines; works with or without the editor pass
 
-# Claude editor pass (needs ANTHROPIC_API_KEY): retakes, false starts, post copy
+# Claude editor pass (needs ANTHROPIC_API_KEY): retakes, caption fixes, hook, callouts, post copy
 use_llm = true
+clean_transcript = true # fix numbers ("fifty five hundred" -> "$5,500"), spelling and casing in captions
 style_notes = "Punchy and tight. Aim for under 60 seconds."
 
 # Framing: 9:16 | 4:5 | 1:1 | 16:9 | source
 aspect = "9:16"
-crop_x = 0.5            # 0 = keep left edge, 1 = keep right edge
+framing = "auto"        # auto = find the speaker and keep them in frame; manual = use crop_x / crop_y
+crop_x = 0.5            # manual position: 0 = keep left edge, 1 = keep right edge
+punch_in = 1.08         # slight zoom alternated at hard cuts so jump cuts look intentional; 1.0 = off
 
 # Captions
 captions = true
@@ -26,6 +30,16 @@ caption_y = 0.70
 caption_color = "FFFFFF"
 caption_highlight = "FFE14D"
 caption_uppercase = true
+
+# Extras
+hook = true             # cold-open with the strongest line and show a hook title over the first seconds
+callouts = true         # on-screen cards for the key numbers, placed by the editor pass
+broll_dir = ""          # folder of photos to cut away to (jpg/png/webp); the editor pass picks where
+broll_seconds = 2.5
+music = ""              # a music file, or a folder of them; ducked under the speech
+music_db = -20.0        # music level relative to speech
+cta = "Follow for more" # end-card text; "" for none
+cta_seconds = 3.0
 
 # Output
 loudness = -14.0

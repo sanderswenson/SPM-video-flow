@@ -75,10 +75,12 @@ class App:
                 plan = self.jobs.load_plan(job_id)
                 return {
                     "words": [
-                        {"t": w.text, "s": w.start, "e": w.end, "k": k, "r": plan.reasons.get(i, "")}
+                        {"t": w.text, "s": w.start, "e": w.end, "k": k, "r": plan.reasons.get(i, ""),
+                         **({"d": w.display} if w.display is not None else {})}
                         for i, (w, k) in enumerate(zip(plan.words, plan.keep))
                     ],
                     "post": plan.post,
+                    "overlays": plan.overlays,
                 }
             case "POST", ["jobs", job_id, "plan"]:
                 return {"summary": self.jobs.save_keep(job_id, body["keep"])}

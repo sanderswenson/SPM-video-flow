@@ -18,10 +18,11 @@ from .store import AppSettings, work_root
 # Rough share of total time each stage takes, so one bar can span the whole job.
 STAGES = {
     "Extracting audio": (0.00, 0.03),
-    "Transcribing": (0.03, 0.45),
-    "Finding retakes and writing post copy": (0.45, 0.55),
-    "Cutting": (0.55, 0.75),
-    "Rendering": (0.75, 1.00),
+    "Transcribing": (0.03, 0.40),
+    "Editor pass": (0.40, 0.50),
+    "Framing": (0.50, 0.58),
+    "Cutting": (0.58, 0.76),
+    "Rendering": (0.76, 1.00),
 }
 
 

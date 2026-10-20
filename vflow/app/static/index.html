@@ -112,6 +112,7 @@
   .w.cut.filler { color: #a3a3a3; } .w.cut.retake { color: var(--warn); } .w.cut.false_start { color: #fb923c; }
   .w.cut.stutter { color: #c084fc; } .w.cut.off_script { color: var(--err); } .w.cut.tangent { color: #22d3ee; }
   .w.cut.manual { color: var(--info); }
+  .w.fixed { text-decoration: underline dotted var(--info); text-underline-offset: 3px; }
   .gap { display: inline-block; width: 1.2em; color: var(--line); }
   .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel2);
     border: 1px solid var(--line); padding: 9px 14px; border-radius: 8px; display: none; }
@@ -130,14 +131,14 @@
   <main>
     <div class="wrap">
       <div id="keyBanner" class="banner" hidden>
-        <div class="msg">Add a Claude API key to remove retakes and false starts automatically and get post copy. Without it, vflow still cuts silences and filler words.</div>
+        <div class="msg">Add a Claude API key for the editor pass: subtler retakes, caption fixes, a hook, callouts and post copy. Without it, vflow still cuts silences, filler words and repeated lines, frames the speaker and adds captions.</div>
         <button id="keyBannerBtn">Add key</button>
       </div>
 
       <div class="drop" id="drop">
         <div class="txt">
           <h2>Drop raw videos here</h2>
-          <p>vflow cuts the dead air, filler words and retakes, frames it vertically, adds captions and evens out the audio.</p>
+          <p>vflow cuts the dead air, filler words and retakes, keeps the speaker in frame, adds captions, a hook and an end card, and evens out the audio.</p>
         </div>
         <button class="primary" id="addBtn">Add videos</button>
         <div class="pathadd" id="pathAdd" hidden>
@@ -171,8 +172,19 @@
           <option value="source">Keep original</option>
         </select></label>
       <label class="row"><span>Framing</span>
+        <select data-key="framing">
+          <option value="auto">Follow the speaker</option>
+          <option value="manual">Fixed position</option>
+        </select></label>
+      <label class="row"><span>Fixed position</span>
         <input type="range" min="0" max="1" step="0.05" data-key="crop_x" data-num></label>
-      <div class="hint">Which part of a wide shot to keep when cropping: left ← center → right.</div>
+      <div class="hint">Which part of a wide shot to keep when cropping: left ← center → right. Used when framing is fixed, or when no face is found.</div>
+      <label class="row"><span>Punch in at cuts</span>
+        <select data-key="punch_in" data-num>
+          <option value="1">Off</option>
+          <option value="1.08">Subtle</option>
+          <option value="1.15">Strong</option>
+        </select></label>
       <label class="row"><span>Pause before rendering so I can review cuts</span><input type="checkbox" data-key="review"></label>
     </fieldset>
 
@@ -181,7 +193,9 @@
       <label class="row"><span>Pacing</span>
         <input type="range" min="0.15" max="0.8" step="0.05" data-key="max_pause" data-num></label>
       <div class="hint">Longest pause kept: <b id="pauseVal"></b>. Shorter is punchier.</div>
-      <label class="row"><span>Remove retakes with Claude</span><input type="checkbox" data-key="use_llm"></label>
+      <label class="row"><span>Cut repeated lines automatically</span><input type="checkbox" data-key="cut_repeats"></label>
+      <label class="row"><span>Editor pass with Claude (retakes, captions, hook, post copy)</span><input type="checkbox" data-key="use_llm"></label>
+      <label class="row"><span>Fix numbers and spelling in captions</span><input type="checkbox" data-key="clean_transcript"></label>
       <label style="display:flex;flex-direction:column;gap:6px"><span>Notes for the editor</span>
         <textarea data-key="style_notes" placeholder="e.g. Keep it under 45 seconds. Cut the intro small talk."></textarea></label>
       <label class="row"><span>Transcription</span>
@@ -213,6 +227,18 @@
         <input type="range" min="0.03" max="0.08" step="0.005" data-key="caption_size" data-num></label>
       <label class="row"><span>Height on screen</span>
         <input type="range" min="0.4" max="0.92" step="0.02" data-key="caption_y" data-num></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Extras</legend>
+      <label class="row"><span>Hook: cold-open the best line + title</span><input type="checkbox" data-key="hook"></label>
+      <label class="row"><span>Callout cards for key numbers</span><input type="checkbox" data-key="callouts"></label>
+      <label style="display:flex;flex-direction:column;gap:6px"><span>B-roll image folder</span>
+        <input type="text" data-key="broll_dir" placeholder="Folder of photos to cut away to (optional)"></label>
+      <label style="display:flex;flex-direction:column;gap:6px"><span>Background music</span>
+        <input type="text" data-key="music" placeholder="Music file or folder (optional); ducked under speech"></label>
+      <label style="display:flex;flex-direction:column;gap:6px"><span>Call to action (end card)</span>
+        <input type="text" data-key="cta" placeholder="e.g. Follow for more; leave empty for none"></label>
     </fieldset>
 
     <fieldset>
@@ -378,7 +404,9 @@ function drawReview() {
   const out = [];
   review.words.forEach((w, i) => {
     if (i > 0 && w.s - review.words[i - 1].e > 1.0) out.push(`<span class="gap">⏎</span><br>`);
-    out.push(`<span class="w ${w.k ? "" : "cut " + (w.r || "manual")}" data-i="${i}" title="${w.k ? "" : (w.r || "cut").replace("_", " ")} · ${w.s.toFixed(1)}s">${esc(w.t)}</span> `);
+    const fixed = w.d !== undefined && w.d !== w.t;
+    const title = [w.k ? "" : (w.r || "cut").replace("_", " "), fixed ? `caption: ${w.d || "(folded into previous word)"}` : "", `${w.s.toFixed(1)}s`].filter(Boolean).join(" · ");
+    out.push(`<span class="w ${w.k ? "" : "cut " + (w.r || "manual")}${fixed ? " fixed" : ""}" data-i="${i}" title="${esc(title)}">${esc(w.t)}</span> `);
   });
   $("reviewBody").innerHTML = out.join("");
 }

@@ -1,4 +1,4 @@
-"""Word-level transcripts: the data model, Whisper transcription, and phrase grouping."""
+"""Word-level transcripts: the data model, Whisper transcription, cleanup, and phrase grouping."""
 
 from __future__ import annotations
 
@@ -15,10 +15,15 @@ class Word:
     end: float
     text: str
     prob: float = 1.0
+    display: str | None = None  # cleaned-up text for captions; None = show `text` as transcribed
 
     @property
     def norm(self) -> str:
         return re.sub(r"[^\w']", "", self.text.lower())
+
+    @property
+    def shown(self) -> str:
+        return self.text if self.display is None else self.display
 
 
 def save(words: list[Word], path: Path) -> None:
@@ -27,6 +32,27 @@ def save(words: list[Word], path: Path) -> None:
 
 def load(path: Path) -> list[Word]:
     return [Word(**w) for w in json.loads(path.read_text())]
+
+
+# Whisper emits "$5" ",500" and "long" "-time" as separate tokens. A token that starts with
+# joining punctuation belongs to the word before it.
+_CONTINUATION = re.compile(r"^[,.\-'’](?=[\w$])")
+
+
+def normalize(words: list[Word]) -> list[Word]:
+    """Merge split tokens so numbers, hyphenated words and possessives are single words."""
+    out: list[Word] = []
+    for w in words:
+        text = w.text.strip()
+        if not text:
+            continue
+        glue = _CONTINUATION.match(text) is not None or not re.search(r"\w", text)
+        if glue and out:
+            prev = out[-1]
+            out[-1] = Word(prev.start, max(prev.end, w.end), prev.text + text, min(prev.prob, w.prob), prev.display)
+            continue
+        out.append(Word(w.start, w.end, text, w.prob, w.display))
+    return out
 
 
 def read_wav(path: Path):

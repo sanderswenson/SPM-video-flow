@@ -29,17 +29,21 @@ class Settings:
     fillers: list[str] = field(
         default_factory=lambda: ["um", "uh", "uhm", "umm", "erm", "er", "ah", "hmm", "mm"]
     )
+    cut_repeats: bool = True  # drop earlier takes of repeated lines (runs with or without the editor pass)
 
-    # LLM pass (retakes, flubs, post copy). Skipped when no API key is set.
+    # LLM pass (retakes, flubs, caption cleanup, hook, callouts, post copy). Skipped when no API key is set.
     use_llm: bool = True
     llm_model: str = "claude-opus-5-5"
-    llm_effort: str = "medium"
+    llm_effort: str = "high"
     style_notes: str = ""  # free-form guidance, e.g. "keep it under 60s, punchy"
+    clean_transcript: bool = True  # let the editor pass fix numbers, spelling and grammar in captions
 
     # Framing
     aspect: str = "9:16"  # 9:16 | 4:5 | 1:1 | 16:9 | source
-    crop_x: float = 0.5  # horizontal crop center, 0 = left edge, 1 = right edge
+    framing: str = "auto"  # auto = find the speaker and keep them in frame; manual = crop_x / crop_y
+    crop_x: float = 0.5  # manual horizontal crop position, 0 = left edge, 1 = right edge
     crop_y: float = 0.5
+    punch_in: float = 1.08  # zoom alternated at hard cuts so jump cuts read as intentional; 1.0 = off
 
     # Captions
     captions: bool = True
@@ -51,6 +55,16 @@ class Settings:
     caption_color: str = "FFFFFF"  # RGB hex
     caption_highlight: str = "FFE14D"  # active word, RGB hex
     caption_uppercase: bool = True
+
+    # Extras
+    hook: bool = True  # cold-open with the strongest line and show a hook title over the first seconds
+    callouts: bool = True  # big on-screen number/keyword cards where the editor pass suggests them
+    broll_dir: str = ""  # folder of images to cut away to; the editor pass decides where they go
+    broll_seconds: float = 2.5
+    music: str = ""  # audio file (or a folder of them) for a background bed, ducked under speech
+    music_db: float = -20.0  # music level relative to the speech
+    cta: str = "Follow for more"  # end card text; empty = no end card (the editor pass may tailor it)
+    cta_seconds: float = 3.0
 
     # Output
     loudness: float = -14.0  # integrated LUFS target (IG/TikTok/YT normalize around here)
