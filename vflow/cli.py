@@ -4,16 +4,22 @@
     vflow edit inbox/                  # every video in a folder
     vflow edit raw.mov --plan-only     # stop after deciding cuts; review work/raw/plan.json
     vflow render work/raw              # render (or re-render) from an edited plan.json
+    vflow hooks raw.mov                # hook sheet: 10 hooks to film, matched to what the clip says
+    vflow variants raw.mov --hooks hooks/   # one video per filmed hook clip
+    vflow variants raw.mov --pick 1,4       # one video per hook, from the footage alone
 """
 
 from __future__ import annotations
 
 import argparse
+import re
+import sys
 from pathlib import Path
 
-from . import media
+from . import hooks, llm, media
 from .config import Settings
-from .pipeline import VIDEO_EXTS, output_for, process, render_plan
+from .hooks import HookSheet
+from .pipeline import VIDEO_EXTS, make_plan, output_for, process, render_plan, render_variant, workdir_for
 from .plan import Plan
 
 
@@ -52,7 +58,29 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("workdir", type=Path)
     _common(r)
 
+    h = sub.add_parser("hooks", help="write a hook sheet: lines to film, matched to what the clip says")
+    h.add_argument("input", type=Path, help="video file")
+    h.add_argument("--work", type=Path, default=Path("work"), help="scratch folder (default: work/)")
+    h.add_argument("--count", dest="hooks_count", type=int, help="how many hooks to propose (default 10)")
+    h.add_argument("--no-llm", dest="use_llm", action="store_const", const=False,
+                   help="catalog match and template drafts only, no API calls")
+    h.add_argument("--notes", dest="style_notes", help='guidance for the writer, e.g. "dry, no questions"')
+    h.add_argument("--transcript", type=Path, help="use an existing transcript.json instead of transcribing")
+    h.add_argument("--whisper-model", help="faster-whisper model (tiny.en, base.en, small.en, medium.en, large-v3)")
+    _common(h)
+
+    v = sub.add_parser("variants", help="render one video per hook: filmed hook clips prepended, or hooks from the footage")
+    v.add_argument("input", type=Path, help="the raw video; run `edit` or `hooks` on it first")
+    v.add_argument("--hooks", nargs="*", type=Path, default=[], metavar="CLIP",
+                   help="filmed hook clips (files or a folder); a number in the name picks the hook, e.g. 03.mov")
+    v.add_argument("--pick", help='hook numbers to render, e.g. "1,3,5" (default: every hook with a clip, '
+                                  'else every "from footage" hook)')
+    v.add_argument("--work", type=Path, default=Path("work"), help="scratch folder (default: work/)")
+    _common(v)
+
     args = ap.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")  # hook sheets have arrows and curly quotes; cp1252 consoles don't
     media.require_ffmpeg()
     s = Settings.load(args.config)
     overrides = {k: v for k, v in vars(args).items() if k in Settings.__dataclass_fields__}
@@ -64,6 +92,10 @@ def main(argv: list[str] | None = None) -> None:
         print("  " + render_plan(plan, args.workdir, out, s))
         print(f"  -> {out}")
         return
+    if args.cmd == "hooks":
+        return cmd_hooks(args, s)
+    if args.cmd == "variants":
+        return cmd_variants(args, s)
 
     files: list[Path] = []
     for p in args.inputs:
@@ -78,6 +110,74 @@ def main(argv: list[str] | None = None) -> None:
 
     for f in files:
         process(f, args.out, args.work, s, plan_only=args.plan_only, transcript_path=args.transcript)
+
+
+def write_sheet(plan: Plan, src: Path, wd: Path, out_dir: Path, s: Settings) -> tuple[HookSheet, Path]:
+    """Produce the hook sheet for a plan: hooks.json in the work folder, a readable .md next to the outputs."""
+    sheet = hooks.produce(plan, s)
+    sheet.save(wd / "hooks.json")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    md = out_dir / f"{src.stem}_hooks.md"
+    md.write_text(sheet.markdown(src.name), encoding="utf-8")
+    return sheet, md
+
+
+def cmd_hooks(args, s: Settings) -> None:
+    src: Path = args.input
+    if not src.is_file():
+        raise SystemExit(f"not found: {src}")
+    print(f"\n== {src.name}")
+    if s.use_llm and not llm.available():
+        print("  (ANTHROPIC_API_KEY not set: hooks come straight from the catalog templates)")
+    wd = workdir_for(src, args.work)
+    plan_file = wd / "plan.json"
+    if plan_file.exists():
+        plan = Plan.load(plan_file)
+    else:
+        plan = make_plan(src, wd, s, args.transcript)
+        plan.save(plan_file)
+    sheet, md = write_sheet(plan, src, wd, args.out, s)
+    print()
+    print(sheet.markdown(src.name))
+    print(f"  -> {md}")
+
+
+def cmd_variants(args, s: Settings) -> None:
+    src: Path = args.input
+    wd = workdir_for(src, args.work)
+    if not (wd / "plan.json").exists():
+        raise SystemExit(f"no plan for {src.name} in {wd}: run `vflow edit` or `vflow hooks` on it first")
+    plan = Plan.load(wd / "plan.json")
+    sheet_file = wd / "hooks.json"
+    sheet = HookSheet.load(sheet_file) if sheet_file.exists() else write_sheet(plan, src, wd, args.out, s)[0]
+
+    files: list[Path] = []
+    for p in args.hooks:
+        if p.is_dir():
+            files += sorted(f for f in p.iterdir() if f.suffix.lower() in VIDEO_EXTS)
+        elif p.is_file():
+            files.append(p)
+        else:
+            raise SystemExit(f"not found: {p}")
+    picks = [int(x) for x in re.split(r"[,\s]+", args.pick.strip()) if x] if args.pick else None
+    if bad := [n for n in picks or [] if not 1 <= n <= len(sheet.hooks)]:
+        raise SystemExit(f"no hook {bad[0]} on the sheet (it has {len(sheet.hooks)})")
+    clips = hooks.assign_clips(files, len(sheet.hooks), picks) if files else {}
+    if picks is None:
+        picks = sorted(clips) if clips else [h.n for h in sheet.hooks if h.from_footage]
+    if not picks:
+        raise SystemExit("nothing to render: give filmed hook clips with --hooks, or hook numbers with --pick")
+
+    print(f"\n== {src.name}: {len(picks)} variant{'s' if len(picks) != 1 else ''}")
+    for n in picks:
+        hook = sheet.hooks[n - 1]
+        clip = clips.get(n)
+        print(f"\n-- hook {n}: {hook.title}  ({'clip: ' + clip.name if clip else 'from footage'})")
+        if clip is None and not hook.cold_open:
+            print("  (no filmed clip and no stand-in line in the footage: the title alone opens the video)")
+        out, summary = render_variant(plan, wd, args.out, s, hook, clip)
+        print("  " + summary)
+        print(f"  -> {out}")
 
 
 if __name__ == "__main__":

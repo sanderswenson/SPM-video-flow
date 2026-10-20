@@ -40,13 +40,14 @@ def cut_segments(src: Path, shots: list[Shot], framings: list[Framing], size: tu
 
     def one(i: int) -> str:
         sh, fr = shots[i], framings[i]
+        src_i = Path(sh.source) if sh.source else src
         dur = sh.duration
         # Floor the seek so float error can never push it past the first frame's timestamp.
         seek = math.floor(sh.start * 1e6) / 1e6
         name = f"{i:04d}.mov"
         fade = min(FADE, dur / 4)
         media.run([
-            "-ss", f"{seek:.6f}", "-i", str(src), "-t", f"{dur:.6f}",
+            "-ss", f"{seek:.6f}", "-i", str(src_i), "-t", f"{dur:.6f}",
             "-map", "0:v:0", "-map", "0:a:0",
             "-vf", f"fps={fps},{fr.filter(size)},setsar=1",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p",

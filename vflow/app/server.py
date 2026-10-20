@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from .. import __version__, llm, stock
+from ..hooks import HookSheet
 from . import store
 from .jobs import JobManager
 
@@ -93,6 +94,28 @@ class App:
                 }
             case "POST", ["jobs", job_id, "plan"]:
                 return {"summary": self.jobs.save_keep(job_id, body["keep"])}
+            case "GET", ["jobs", job_id, "hooks"]:
+                job = self.jobs.get(job_id)
+                f = job.workdir / "hooks.json"
+                return {"sheet": HookSheet.load(f).to_dict() if f.exists() else None}
+            case "POST", ["jobs", job_id, "hooks"]:
+                sheet = self.jobs.hooks(job_id, regenerate=bool(body.get("regenerate")))
+                return {"sheet": sheet.to_dict()}
+            case "POST", ["jobs", job_id, "assign-clips"]:
+                picks = [int(n) for n in body.get("picks") or []] or None
+                return {"clips": self.jobs.assign(job_id, body.get("paths") or [], picks)}
+            case "POST", ["jobs", job_id, "variants"]:
+                picks = [int(n) for n in body.get("picks") or []]
+                return {"ids": self.jobs.add_variants(job_id, picks, body.get("clips") or {})}
+            case "POST", ["jobs", job_id, "open-sheet"]:
+                md = self.jobs.sheet_path(self.jobs.get(job_id))
+                if not md.exists():
+                    raise ValueError("No hook sheet written yet")
+                reveal(md, select=False)
+                return {}
+            case "POST", ["pick-clips"]:
+                paths = self.pick_files() if self.pick_files else []
+                return {"paths": list(paths or [])}
             case "POST", ["jobs", job_id, "render"]:
                 self.jobs.render(job_id)
                 return {}

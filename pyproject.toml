@@ -30,7 +30,7 @@ build-backend = "setuptools.build_meta"
 packages = ["vflow", "vflow.app"]
 
 [tool.setuptools.package-data]
-vflow = ["fonts/*"]
+vflow = ["fonts/*", "data/*"]
 "vflow.app" = ["static/*"]
 
 [tool.setuptools.dynamic]

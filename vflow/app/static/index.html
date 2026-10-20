@@ -117,6 +117,22 @@
   .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel2);
     border: 1px solid var(--line); padding: 9px 14px; border-radius: 8px; display: none; }
   .toast.show { display: block; }
+
+  /* Hooks panel */
+  .modal-body.hooks { font-size: 14px; line-height: 1.5; display: flex; flex-direction: column; gap: 10px; }
+  .hooks-intro { color: var(--muted); font-size: 13px; }
+  .hooks-intro b { color: var(--text); font-weight: 600; }
+  .hook { display: flex; gap: 12px; background: var(--panel2); border-radius: 8px; padding: 10px 12px; align-items: flex-start; }
+  .hook input[type=checkbox] { margin-top: 4px; flex: none; }
+  .hook-main { flex: 1; min-width: 0; }
+  .hook-title { font-weight: 700; font-size: 15px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .hook-title .pill { font-weight: 500; }
+  .hook-say { margin-top: 4px; color: #d4d5d9; }
+  .hook-meta, .hook-src { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .hook-src b { color: var(--text); font-weight: 600; }
+  .hook-src .ok { color: var(--ok); }
+  .hook-src button { padding: 1px 7px; font-size: 11px; margin-left: 6px; }
+  .name .sub { color: var(--muted); font-weight: 400; }
 </style>
 </head>
 <body>
@@ -242,6 +258,20 @@
     </fieldset>
 
     <fieldset>
+      <legend>Hooks</legend>
+      <label class="row"><span>Hooks per sheet</span>
+        <select data-key="hooks_count" data-num>
+          <option value="5">5</option>
+          <option value="8">8</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+        </select></label>
+      <label style="display:flex;flex-direction:column;gap:6px"><span>Your own hook patterns</span>
+        <input type="text" data-key="hooks_catalog" placeholder="Path to a TOML file (optional); same format as the built-in catalog"></label>
+      <div class="hint">Each finished video gets a hook sheet: hooks to film as separate takes, matched to what the clip says. Open it with <b>Hooks</b> on the video.</div>
+    </fieldset>
+
+    <fieldset>
       <legend>Stock photos for B-roll</legend>
       <label class="row"><span>Provider</span>
         <select data-key="stock_provider">
@@ -283,6 +313,25 @@
   </div>
 </section>
 
+<section class="modal" id="hooksModal" aria-label="Hooks">
+  <div class="modal-head">
+    <h3 id="hooksTitle">Hooks</h3>
+    <div class="grow"></div>
+    <span id="hooksWriter" class="hint" style="margin:0"></span>
+    <button class="ghost" id="hooksRewrite" title="Throw this sheet away and write a new one">Rewrite</button>
+    <button class="ghost" id="hooksOpenSheet" title="Open the sheet as a text file">Open sheet</button>
+    <button class="ghost" id="hooksClose">Close</button>
+  </div>
+  <div class="modal-body hooks" id="hooksBody"></div>
+  <div class="modal-foot">
+    <div class="hint" style="margin:0" id="hooksHint">Film each hook as its own take, then add the clips here. Hooks marked "from footage" can be rendered right away.</div>
+    <div class="grow"></div>
+    <div class="pathadd" id="clipPathAdd" hidden style="margin:0;width:300px"><input type="text" id="clipPathInput" placeholder="Folder or file of filmed hooks, then Enter"></div>
+    <button id="hooksAddClips">Add filmed hooks…</button>
+    <button class="primary" id="hooksRender">Render selected</button>
+  </div>
+</section>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -315,10 +364,13 @@ function jobHtml(j) {
   const pct = j.progress == null ? null : Math.round(j.progress * 100);
   const showBar = j.status === "working" || j.status === "queued" || j.status === "render_queued";
   const actions = [];
-  if (j.status === "review") actions.push(`<button class="primary" data-act="review">Review cuts</button>`, `<button data-act="render">Render as is</button>`);
-  if (j.status === "done") actions.push(`<button class="primary" data-act="play">Play</button>`, `<button data-act="folder">Show in folder</button>`, `<button data-act="review">Adjust cuts</button>`);
+  const v = j.variant;
+  if (j.status === "review") actions.push(`<button class="primary" data-act="review">Review cuts</button>`, `<button data-act="render">Render as is</button>`, `<button data-act="hooks">Hooks</button>`);
+  if (j.status === "done") actions.push(`<button class="primary" data-act="play">Play</button>`, `<button data-act="folder">Show in folder</button>`);
+  if (j.status === "done" && !v) actions.push(`<button data-act="review">Adjust cuts</button>`, `<button data-act="hooks">Hooks</button>`);
   if (j.status === "error") actions.push(`<button data-act="retry">Retry</button>`);
   if (j.status !== "working") actions.push(`<button class="ghost" data-act="remove">Remove</button>`);
+  const label = v ? `${esc(j.name)} <span class="sub">· hook ${v.n}: ${esc(v.title)}${v.clip ? "" : " (from footage)"}</span>` : esc(j.name);
   const p = j.post || {};
   const post = j.status === "done" && p.caption ? `
     <div class="post">
@@ -330,7 +382,7 @@ function jobHtml(j) {
   return `
     <div class="job" data-id="${j.id}">
       <div class="job-top">
-        <div class="name grow" title="${esc(j.src)}">${esc(j.name)}</div>
+        <div class="name grow" title="${esc(j.src)}">${label}</div>
         <span class="pill ${j.status === "render_queued" ? "queued" : j.status}">${STATUS[j.status] || j.status}</span>
       </div>
       ${j.status === "error" ? `<div class="msg-err">${esc(j.message)}</div>` :
@@ -390,6 +442,7 @@ $("jobs").addEventListener("click", async (e) => {
   const job = state.jobs.find(j => j.id === id);
   try {
     if (act === "review") openReview(job);
+    else if (act === "hooks") openHooks(job);
     else if (act === "render") await api(`jobs/${id}/render`, {});
     else if (act === "retry") await api(`jobs/${id}/retry`, {});
     else if (act === "remove") await api(`jobs/${id}/remove`, {});
@@ -439,6 +492,113 @@ async function saveReview() {
   $("reviewSummary").textContent = r.summary;
 }
 function closeReview() { $("review").classList.remove("open"); if (!$("drawer").classList.contains("open")) $("scrim").classList.remove("open"); review = null; }
+
+// --- hooks ---
+let hooksView = null;  // { id, name, sheet, clips: {n: path}, picked: Set }
+function mmss(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return `${m}:${String(s).padStart(2, "0")}`; }
+function baseName(p) { return String(p).split(/[\\/]/).pop(); }
+async function openHooks(job) {
+  hooksView = { id: job.id, name: job.name, sheet: null, clips: {}, picked: new Set() };
+  $("hooksTitle").textContent = "Hooks — " + job.name;
+  $("hooksWriter").textContent = "";
+  $("hooksBody").innerHTML = `<div class="hooks-intro">Loading…</div>`;
+  $("hooksModal").classList.add("open"); $("scrim").classList.add("open");
+  try {
+    let r = await api(`jobs/${job.id}/hooks`);
+    if (!r.sheet) {
+      $("hooksBody").innerHTML = `<div class="hooks-intro">${state.has_key && state.settings.use_llm ? "Writing hooks with Claude…" : "Matching the hook catalog against the transcript…"}</div>`;
+      r = await api(`jobs/${job.id}/hooks`, {});
+    }
+    if (!hooksView || hooksView.id !== job.id) return;
+    hooksView.sheet = r.sheet;
+    drawHooks();
+  } catch (err) { $("hooksBody").innerHTML = `<div class="hooks-intro" style="color:var(--err)">${esc(err.message)}</div>`; }
+}
+function drawHooks() {
+  const v = hooksView, sheet = v.sheet;
+  const writer = sheet.writer === "catalog" ? "Drafted from the catalog templates (no Claude key): tighten the lines before filming" : `Written by ${sheet.writer}`;
+  $("hooksWriter").textContent = writer;
+  const sig = sheet.signals || {};
+  const facts = ["money", "before_after", "percent", "timeframe", "count", "audience", "place"].filter(k => sig[k]?.length).map(k => sig[k].slice(0, 3).join(", ")).join(" · ");
+  const out = [`<div class="hooks-intro">${facts ? `What the clip gives us: <b>${esc(facts)}</b>. ` : ""}${sheet.payoff_text ? `Payoff line: “${esc(sheet.payoff_text)}”` : ""}</div>`];
+  for (const h of sheet.hooks) {
+    const clip = v.clips[h.n];
+    const checked = v.picked.has(h.n) ? "checked" : "";
+    const src = clip
+      ? `<span class="ok">Clip:</span> <b>${esc(baseName(clip))}</b><button class="ghost" data-unclip="${h.n}">remove</button>`
+      : h.cold_open_at ? `${h.from_footage ? "From footage: yes, " : ""}cold open ${mmss(h.cold_open_at[0])}–${mmss(h.cold_open_at[1])} “${esc(h.cold_open_text)}”`
+      : "No stand-in line in the footage: without a filmed clip the title alone opens the video.";
+    out.push(`
+      <div class="hook" data-n="${h.n}">
+        <input type="checkbox" data-pick="${h.n}" ${checked} title="Render a video with this hook">
+        <div class="hook-main">
+          <div class="hook-title"><span>${h.n}. ${esc(h.title)}</span><span class="pill">${esc(h.name)}</span></div>
+          <div class="hook-say">Say: “${esc(h.spoken)}”</div>
+          <div class="hook-meta">${esc([h.why, h.film].filter(Boolean).join(" · "))}</div>
+          <div class="hook-src">${src}</div>
+        </div>
+      </div>`);
+  }
+  $("hooksBody").innerHTML = out.join("");
+  const n = v.picked.size;
+  $("hooksRender").textContent = n ? `Render ${n} video${n === 1 ? "" : "s"}` : "Render selected";
+  $("hooksRender").disabled = n === 0;
+}
+$("hooksBody").addEventListener("change", (e) => {
+  const cb = e.target.closest("input[data-pick]"); if (!cb || !hooksView) return;
+  const n = +cb.dataset.pick;
+  if (cb.checked) hooksView.picked.add(n); else hooksView.picked.delete(n);
+  drawHooks();
+});
+$("hooksBody").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-unclip]"); if (!btn || !hooksView) return;
+  const n = +btn.dataset.unclip;
+  delete hooksView.clips[n]; hooksView.picked.delete(n);
+  drawHooks();
+});
+async function addClips(paths) {
+  if (!paths.length || !hooksView) return;
+  try {
+    const r = await api(`jobs/${hooksView.id}/assign-clips`, { paths });
+    const got = Object.entries(r.clips);
+    if (!got.length) { toast("No video files found there"); return; }
+    for (const [n, p] of got) { hooksView.clips[n] = p; hooksView.picked.add(+n); }
+    drawHooks();
+    toast(`${got.length} clip${got.length === 1 ? "" : "s"} matched to hook${got.length === 1 ? "" : "s"} ${got.map(([n]) => n).join(", ")}`);
+  } catch (err) { toast(err.message); }
+}
+$("hooksAddClips").onclick = async () => {
+  if (!state?.native) { $("clipPathAdd").hidden = false; $("clipPathInput").focus(); return; }
+  const r = await api("pick-clips", {});
+  await addClips(r.paths || []);
+};
+$("clipPathInput").addEventListener("keydown", async (e) => {
+  if (e.key !== "Enter" || !e.target.value.trim()) return;
+  await addClips([e.target.value.trim().replace(/^"|"$/g, "")]);
+  e.target.value = "";
+});
+$("hooksRender").onclick = async () => {
+  const v = hooksView; if (!v || !v.picked.size) return;
+  const picks = [...v.picked].sort((a, b) => a - b);
+  const clips = {}; for (const n of picks) if (v.clips[n]) clips[n] = v.clips[n];
+  try {
+    await api(`jobs/${v.id}/variants`, { picks, clips });
+    toast(`Queued ${picks.length} video${picks.length === 1 ? "" : "s"}`);
+    closeHooks();
+  } catch (err) { toast(err.message); }
+};
+$("hooksRewrite").onclick = async () => {
+  if (!hooksView) return;
+  $("hooksBody").innerHTML = `<div class="hooks-intro">Writing a new sheet…</div>`;
+  try {
+    const r = await api(`jobs/${hooksView.id}/hooks`, { regenerate: true });
+    hooksView.sheet = r.sheet; hooksView.clips = {}; hooksView.picked = new Set();
+    drawHooks();
+  } catch (err) { toast(err.message); drawHooks(); }
+};
+$("hooksOpenSheet").onclick = async () => { try { await api(`jobs/${hooksView.id}/open-sheet`, {}); } catch (err) { toast(err.message); } };
+function closeHooks() { $("hooksModal").classList.remove("open"); if (!$("drawer").classList.contains("open")) $("scrim").classList.remove("open"); hooksView = null; }
+$("hooksClose").onclick = closeHooks;
 $("reviewCancel").onclick = async () => { clearTimeout(saveTimer); if (review) await saveReview(); closeReview(); };
 $("reviewRender").onclick = async () => {
   clearTimeout(saveTimer); await saveReview(); await api(`jobs/${review.id}/render`, {}); closeReview();
@@ -476,12 +636,12 @@ document.querySelectorAll("[data-key]").forEach(el => {
 document.querySelector('[data-key="max_pause"]').addEventListener("input", (e) => $("pauseVal").textContent = Number(e.target.value).toFixed(2) + "s");
 
 function openSettings() { fillSettings(state.settings); $("drawer").classList.add("open"); $("scrim").classList.add("open"); }
-function closeSettings() { $("drawer").classList.remove("open"); if (!review) $("scrim").classList.remove("open"); }
+function closeSettings() { $("drawer").classList.remove("open"); if (!review && !hooksView) $("scrim").classList.remove("open"); }
 $("openSettings").onclick = openSettings;
 $("keyBannerBtn").onclick = () => { openSettings(); $("keyInput").focus(); };
 $("closeSettings").onclick = closeSettings;
-$("scrim").onclick = () => { if (review) return; closeSettings(); };
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (review) $("reviewCancel").click(); else closeSettings(); } });
+$("scrim").onclick = () => { if (review || hooksView) return; closeSettings(); };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (review) $("reviewCancel").click(); else if (hooksView) closeHooks(); else closeSettings(); } });
 $("browseOut").onclick = async () => {
   if (!state.native) { $("output_dir").focus(); return; }
   const r = await api("pick-folder", {}); if (r.folder) { $("output_dir").value = r.folder; state.settings.output_dir = r.folder; }

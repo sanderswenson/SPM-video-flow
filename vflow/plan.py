@@ -219,6 +219,7 @@ class Shot:
     start: float  # source time range, frame-snapped
     end: float
     kind: str = "main"  # "hook" for a cold-open clip that also appears later in the main body
+    source: str | None = None  # another file to cut this shot from (a filmed hook clip); None = the plan's source
 
     @property
     def duration(self) -> float:

@@ -6,13 +6,17 @@ unknown) so the CLI can print and the app can drive a progress bar.
 
 from __future__ import annotations
 
+import copy
 import hashlib
+import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 from . import captions, framing, llm, media, render, stock, transcript
 from .config import Settings
-from .plan import Plan, Shot, drop_fillers, drop_repeats, remap, shots, summary, total_duration, word_times
+from .hooks import Hook
+from .plan import Plan, Shot, drop_fillers, drop_repeats, remap, segments, shots, summary, total_duration, word_times
 
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -166,16 +170,45 @@ def broll_cues(plan: Plan, shot_list: list[Shot], s: Settings, total: float, wd:
     return cues, credits
 
 
-def render_plan(plan: Plan, wd: Path, out: Path, s: Settings, report: Report = print_report) -> str:
-    """Render and return a one-line summary of the edit."""
-    src = Path(plan.source)
-    info = media.probe(src)
-    shot_list = shots(plan, s)
-    if not shot_list:
-        raise ValueError("The edit keeps nothing. Mark some words as kept and try again.")
-    total = total_duration(shot_list)
-    size = s.output_size(*info.display_size)
+@dataclass
+class Lead:
+    """A separately filmed hook clip that opens a variant: its own plan (for captions) and its shots."""
+    source: Path
+    plan: Plan
+    shots: list[Shot]
+    workdir: Path
 
+
+def lead_from_clip(clip: Path, wd: Path, s: Settings, report: Report = print_report) -> Lead:
+    """Transcribe a filmed hook clip, trim its dead air, fillers and restarts, and make it the opening shots."""
+    hwd = wd / "hooks" / re.sub(r"[^\w.-]+", "_", clip.stem)
+    hwd.mkdir(parents=True, exist_ok=True)
+    info = media.probe(clip)
+    words_file = hwd / "transcript.json"
+    if words_file.exists():
+        words = transcript.load(words_file)
+    else:
+        audio = hwd / "audio.wav"
+        media.extract_audio(clip, audio)
+        stage = "Transcribing hook clip"
+        words = transcript.transcribe(audio, s.whisper_model, s.language, s.whisper_device,
+                                      lambda st, p: report(stage if st == "Transcribing" else st, p))
+        audio.unlink(missing_ok=True)
+        transcript.save(words, words_file)
+    words = transcript.normalize(words)
+    if not words:
+        raise ValueError(f"No speech found in hook clip {clip.name}")
+    hp = Plan(str(clip.resolve()), info.duration, s.fps or info.fps, words, [True] * len(words))
+    drop_fillers(hp, s.fillers)
+    drop_repeats(hp, aggressive=True)  # a flubbed first attempt in the take goes; the last clean one stays
+    segs = segments(hp, s)
+    if not segs:
+        raise ValueError(f"Nothing left of hook clip {clip.name} after trimming silence")
+    return Lead(clip, hp, [Shot(a, b, "hook", str(clip.resolve())) for a, b in segs], hwd)
+
+
+def _framings(src: Path, info: media.MediaInfo, shot_list: list[Shot], wd: Path, size: tuple[int, int],
+              s: Settings, report: Report) -> list[framing.Framing]:
     samples: list[framing.Sample] = []
     reframes = framing.base_crop(*info.display_size, *size) != info.display_size or s.punch_in > 1.0
     if s.framing == "auto" and reframes:
@@ -184,12 +217,43 @@ def render_plan(plan: Plan, wd: Path, out: Path, s: Settings, report: Report = p
             samples = framing.detect(src, info, wd / "subjects.json", lambda p: report("Framing", p))
         else:
             report("Framing: OpenCV is not installed, using the manual crop position", None)
-    framings = framing.frame_shots(shot_list, samples, info, size, s)
+    return framing.frame_shots(shot_list, samples, info, size, s)
+
+
+def render_plan(plan: Plan, wd: Path, out: Path, s: Settings, report: Report = print_report,
+                lead: Lead | None = None) -> str:
+    """Render and return a one-line summary of the edit.
+
+    With a `lead`, a separately filmed hook clip opens the video in place of the plan's own cold open;
+    its words are captioned too, and everything placed by word (callouts, B-roll) shifts after it.
+    """
+    src = Path(plan.source)
+    info = media.probe(src)
+    if lead is None:
+        shot_list = main = shots(plan, s)
+    else:
+        main = [Shot(a, b) for a, b in segments(plan, s)]
+        shot_list = lead.shots + main
+    if not main:
+        raise ValueError("The edit keeps nothing. Mark some words as kept and try again.")
+    total = total_duration(shot_list)
+    size = s.output_size(*info.display_size)
+
+    framings: list[framing.Framing] = []
+    if lead is not None:
+        framings += _framings(lead.source, media.probe(lead.source), lead.shots, lead.workdir, size, s, report)
+    framings += _framings(src, info, main, wd, size, s, report)
 
     caps = None
     if s.captions:
         caps = wd / "captions.ass"
-        captions.write(remap(plan, shot_list), size, s, caps, overlay_events(plan, shot_list, s, total))
+        words = remap(plan, main)
+        if lead is not None:
+            offset = total_duration(lead.shots)
+            words = remap(lead.plan, lead.shots) + [
+                transcript.Word(round(w.start + offset, 3), round(w.end + offset, 3), w.text, w.prob, w.display)
+                for w in words]
+        captions.write(words, size, s, caps, overlay_events(plan, shot_list, s, total))
     cues, credits = broll_cues(plan, shot_list, s, total, wd, size)
 
     report("Cutting", 0.0)
@@ -206,6 +270,29 @@ def render_plan(plan: Plan, wd: Path, out: Path, s: Settings, report: Report = p
             text += "\nPhotos: " + ", ".join(credits) + "\n"
         out.with_suffix(".txt").write_text(text, encoding="utf-8")
     return summary(plan, shot_list)
+
+
+def variant_output(src: Path, out_dir: Path, hook: Hook) -> Path:
+    return out_dir / f"{src.stem}_hook{hook.n:02d}-{hook.slug}.mp4"
+
+
+def render_variant(plan: Plan, wd: Path, out_dir: Path, s: Settings, hook: Hook, clip: Path | None = None,
+                   report: Report = print_report) -> tuple[Path, str]:
+    """One video for one hook from the hook sheet: a filmed hook clip prepended to the edit, or, without a
+    clip, the hook's title over a cold open of the footage line that stands in for it. Returns the output
+    path and the edit summary."""
+    s = copy.copy(s)
+    s.hook = True
+    v = copy.deepcopy(plan)
+    v.overlays = {k: val for k, val in plan.overlays.items() if k != "hook_range"}
+    v.overlays["hook_text"] = hook.title
+    if clip is None and hook.cold_open:
+        v.overlays["hook_range"] = list(hook.cold_open)
+    if v.post:
+        v.post = {**v.post, "title": hook.post_title or hook.title}
+    lead = lead_from_clip(clip, wd, s, report) if clip is not None else None
+    out = variant_output(Path(plan.source), out_dir, hook)
+    return out, render_plan(v, wd, out, s, report, lead=lead)
 
 
 def process(src: Path, out_dir: Path, work_root: Path, s: Settings, plan_only: bool = False,

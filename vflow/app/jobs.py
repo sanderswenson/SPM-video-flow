@@ -1,4 +1,8 @@
-"""Job queue: one worker thread processes clips in order, the UI polls their state."""
+"""Job queue: one worker thread processes clips in order, the UI polls their state.
+
+A job is a raw clip (transcribe, plan, render) or a *variant* of one: the same plan rendered with a
+different hook from its hook sheet, either a filmed hook clip prepended or a title over a cold open.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +15,8 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..pipeline import make_plan, output_for, render_plan, workdir_for
+from ..hooks import HookSheet, assign_clips, produce
+from ..pipeline import VIDEO_EXTS, make_plan, output_for, render_plan, render_variant, workdir_for
 from ..plan import Plan, segments, summary
 from .store import AppSettings, work_root
 
@@ -20,6 +25,7 @@ STAGES = {
     "Extracting audio": (0.00, 0.03),
     "Transcribing": (0.03, 0.40),
     "Editor pass": (0.40, 0.50),
+    "Transcribing hook clip": (0.00, 0.12),
     "Framing": (0.50, 0.58),
     "Cutting": (0.58, 0.76),
     "Rendering": (0.76, 1.00),
@@ -37,6 +43,8 @@ class Job:
     message: str = ""
     out: str = ""
     post: dict = field(default_factory=dict)
+    # For a variant: {"n": hook number on the sheet, "title": hook title, "clip": filmed clip path or ""}
+    variant: dict | None = None
     added: float = field(default_factory=time.time)
 
     @property
@@ -47,7 +55,7 @@ class Job:
         return {
             "id": self.id, "name": self.src.name, "src": str(self.src), "status": self.status,
             "stage": self.stage, "progress": self.progress, "message": self.message,
-            "out": self.out, "post": self.post,
+            "out": self.out, "post": self.post, "variant": self.variant,
         }
 
 
@@ -80,11 +88,9 @@ class JobManager:
 
     def add(self, paths: list[str]) -> list[str]:
         """Queue videos; returns names that were skipped."""
-        from ..pipeline import VIDEO_EXTS
-
         skipped = []
         with self.lock:
-            existing = {(j.src, j.status) for j in self.jobs}
+            existing = {(j.src, j.status) for j in self.jobs if not j.variant}
             for p in paths:
                 src = Path(p)
                 if not src.is_file() or src.suffix.lower() not in VIDEO_EXTS:
@@ -134,6 +140,58 @@ class JobManager:
             job.status, job.stage, job.progress, job.message = "render_queued", "Waiting to render", 0.0, ""
             self.wake.set()
 
+    # --- hooks -------------------------------------------------------------
+
+    def sheet_path(self, job: Job) -> Path:
+        return Path(self.settings.output_dir) / f"{job.src.stem}_hooks.md"
+
+    def hooks(self, job_id: str, regenerate: bool = False) -> HookSheet:
+        """The job's hook sheet, written on first request (needs the plan, so the clip must have been processed)."""
+        job = self.get(job_id)
+        wd = job.workdir
+        if not (wd / "plan.json").exists():
+            raise ValueError("Process the video first; hooks are matched against its transcript.")
+        sheet_file = wd / "hooks.json"
+        if sheet_file.exists() and not regenerate:
+            return HookSheet.load(sheet_file)
+        sheet = produce(Plan.load(wd / "plan.json"), copy.deepcopy(self.settings.pipeline))
+        sheet.save(sheet_file)
+        md = self.sheet_path(job)
+        md.parent.mkdir(parents=True, exist_ok=True)
+        md.write_text(sheet.markdown(job.src.name), encoding="utf-8")
+        return sheet
+
+    def assign(self, job_id: str, paths: list[str], picks: list[int] | None = None) -> dict[int, str]:
+        """Match filmed hook clips (files or folders) to the sheet's hook numbers."""
+        sheet = self.hooks(job_id)
+        files: list[Path] = []
+        for p in paths:
+            path = Path(p)
+            if path.is_dir():
+                files += sorted(f for f in path.iterdir() if f.suffix.lower() in VIDEO_EXTS)
+            elif path.is_file() and path.suffix.lower() in VIDEO_EXTS:
+                files.append(path)
+        return {n: str(f) for n, f in assign_clips(files, len(sheet.hooks), picks).items()}
+
+    def add_variants(self, job_id: str, picks: list[int], clips: dict[str, str]) -> list[str]:
+        """Queue one render per picked hook; `clips` maps hook numbers (as strings) to filmed clip paths."""
+        job = self.get(job_id)
+        sheet = self.hooks(job_id)
+        ids = []
+        with self.lock:
+            for n in picks:
+                if not 1 <= n <= len(sheet.hooks):
+                    raise ValueError(f"no hook {n} on the sheet")
+                clip = (clips.get(str(n)) or "").strip()
+                if clip and not Path(clip).is_file():
+                    raise ValueError(f"clip not found: {clip}")
+                v = Job(job.src, status="render_queued", stage="Waiting to render",
+                        variant={"n": n, "title": sheet.hooks[n - 1].title, "clip": clip})
+                self.jobs.append(v)
+                ids.append(v.id)
+        self.wake.set()
+        return ids
+
     # --- worker ------------------------------------------------------------
 
     def _next(self) -> Job | None:
@@ -170,19 +228,27 @@ class JobManager:
         report = self._report(job)
         try:
             wd = job.workdir
-            if rendering_only:
+            if job.variant:
                 plan = Plan.load(wd / "plan.json")
+                sheet = HookSheet.load(wd / "hooks.json")
+                hook = sheet.hooks[job.variant["n"] - 1]
+                clip = Path(job.variant["clip"]) if job.variant.get("clip") else None
+                out, job.message = render_variant(plan, wd, out_dir, s, hook, clip, report=report)
+                job.post = {**plan.post, "title": hook.post_title or hook.title} if plan.post else {}
             else:
-                plan = make_plan(job.src, wd, s, report=report)
-                plan.save(wd / "plan.json")
+                if rendering_only:
+                    plan = Plan.load(wd / "plan.json")
+                else:
+                    plan = make_plan(job.src, wd, s, report=report)
+                    plan.save(wd / "plan.json")
+                    job.post = plan.post
+                    if self.settings.review:
+                        job.status, job.stage, job.progress = "review", "Ready for review", None
+                        job.message = summary(plan, segments(plan, s))
+                        return
+                out = output_for(job.src, out_dir)
+                job.message = render_plan(plan, wd, out, s, report=report)
                 job.post = plan.post
-                if self.settings.review:
-                    job.status, job.stage, job.progress = "review", "Ready for review", None
-                    job.message = summary(plan, segments(plan, s))
-                    return
-            out = output_for(job.src, out_dir)
-            job.message = render_plan(plan, wd, out, s, report=report)
-            job.post = plan.post
             job.out = str(out)
             job.status, job.stage, job.progress = "done", "Done", 1.0
             shutil.rmtree(wd / "segments", ignore_errors=True)  # big; plan + transcript stay for re-renders

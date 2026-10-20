@@ -43,6 +43,10 @@ music_db = -20.0        # music level relative to speech
 cta = "Follow for more" # end-card text; "" for none
 cta_seconds = 3.0
 
+# Hooks (`vflow hooks`, `vflow variants`, the app's Hooks panel)
+hooks_count = 10        # hooks proposed per clip
+# hooks_catalog = "my-hooks.toml"   # your own patterns, same format as vflow/data/hooks.toml; same id = override
+
 # Output
 loudness = -14.0
 crf = 20

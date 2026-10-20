@@ -67,6 +67,8 @@ class Settings:
     music_db: float = -20.0  # music level relative to the speech
     cta: str = "Follow for more"  # end card text; empty = no end card (the editor pass may tailor it)
     cta_seconds: float = 3.0
+    hooks_count: int = 10  # hooks per hook sheet (`vflow hooks`, the app's Hooks panel)
+    hooks_catalog: str = ""  # your own hook patterns (TOML, same format as vflow/data/hooks.toml), merged with the bundled ones
 
     # Output
     loudness: float = -14.0  # integrated LUFS target (IG/TikTok/YT normalize around here)

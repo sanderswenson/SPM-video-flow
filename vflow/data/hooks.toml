@@ -1,0 +1,1055 @@
+# Hook catalog: patterns for the first 1-3 seconds of a short-form video.
+#
+# vflow matches these against what a clip actually says (its "signals": money, before/after numbers,
+# a timeframe, an audience, a mistake, a contrast, ...) and turns the best fits into a hook sheet:
+# lines to film, with an on-screen title for each. Add your own patterns here or in a second file
+# pointed to by `hooks_catalog` in vflow.toml (same format; an entry with the same id replaces this one).
+#
+# Fields
+#   id          unique slug
+#   family      groups similar patterns so a sheet doesn't come back as ten number hooks
+#   name        short label shown on the sheet
+#   template    the spoken line. {slots} are filled from the clip when vflow knows them:
+#                 {money} {money_before} {money_after} {timeframe} {number} {percent} {count}
+#                 {audience} {Audience} {audience_singular} {place} {topic} {Topic} {subject} {result}
+#               any other {slot} is left for the creator to fill in ("[mistake]") on the sheet.
+#   example     the template filled in, for the writer to copy the feel of
+#   needs       signals that must be present in the clip for the pattern to be offered
+#   wants       signals that make it stronger (optional)
+#   avoid       signals that make it a poor fit (optional)
+#   delivery    spoken | text | either  (text = works as an on-screen title alone)
+#   footage_ok  true when a title plus a cold open of a line already in the footage carries it,
+#               so a variant can be rendered without filming anything
+#   film        one-line filming note
+#
+# Signals vflow can detect: money percent number count timeframe before_after result cost mistake
+# contrast list process question audience place proof secret comparison story how_to emotion topic
+
+# ---- number: lead with the figure ----------------------------------------------------------
+
+[[hook]]
+id = "number-result"
+family = "number"
+name = "Number → result"
+template = "{money} in. {result}."
+example = "$5,500 in. $4,200 a year out."
+needs = ["money", "result"]
+wants = ["timeframe", "before_after"]
+delivery = "either"
+footage_ok = true
+film = "Hold the figure up on a card or your phone; cut on the number."
+
+[[hook]]
+id = "number-where-it-went"
+family = "number"
+name = "The figure, then the breakdown"
+template = "{money}. Here's exactly where it went."
+example = "$5,500. Here's exactly where it went."
+needs = ["cost"]
+wants = ["list", "process"]
+delivery = "spoken"
+footage_ok = true
+film = "Say the number, pause a beat, then the second sentence faster."
+
+[[hook]]
+id = "number-what-it-buys"
+family = "number"
+name = "What the money buys"
+template = "What does {money} get you on a {topic}?"
+example = "What does $5,500 get you on a rental?"
+needs = ["money", "topic"]
+wants = ["list", "place"]
+delivery = "spoken"
+footage_ok = false
+film = "Ask it like you expect an answer; look at the lens."
+
+[[hook]]
+id = "number-jump"
+family = "number"
+name = "The jump"
+template = "{money_before} to {money_after}. Here's the math."
+example = "$3,250 to $3,600. Here's the math."
+needs = ["before_after"]
+wants = ["timeframe"]
+delivery = "either"
+footage_ok = true
+film = "Two numbers on screen, one at a time, as you say them."
+
+[[hook]]
+id = "number-count-and-cost"
+family = "number"
+name = "Count and cost"
+template = "{count} fixes. {money}. Worth it?"
+example = "Twelve fixes. $5,500. Worth it?"
+needs = ["count", "money"]
+wants = ["result"]
+delivery = "spoken"
+footage_ok = false
+film = "Count on your fingers or hold up the list."
+
+[[hook]]
+id = "number-timeframe-only"
+family = "number"
+name = "Just the timeframe"
+template = "{timeframe}. That's all it took."
+example = "14 days. That's all it took."
+needs = ["timeframe", "result"]
+delivery = "either"
+footage_ok = true
+film = "Flat delivery, no smile until the second sentence."
+
+[[hook]]
+id = "number-percent-claim"
+family = "number"
+name = "The percentage"
+template = "{percent} of {audience} get this wrong."
+example = "80% of landlords get this wrong."
+needs = ["percent", "audience"]
+wants = ["mistake"]
+delivery = "either"
+footage_ok = true
+film = "Only use a percentage you actually said in the video."
+
+# ---- payoff: start at the end ---------------------------------------------------------------
+
+[[hook]]
+id = "payoff-first"
+family = "payoff"
+name = "Payoff first"
+template = "{result}. Let me show you how."
+example = "We re-rented it for $350 more a month. Let me show you how."
+needs = ["result"]
+wants = ["money", "timeframe"]
+delivery = "spoken"
+footage_ok = true
+film = "Say the result flat, no build-up, then a beat before 'how'."
+
+[[hook]]
+id = "payoff-punchline"
+family = "payoff"
+name = "Skip to the punchline"
+template = "Skip to the punchline: {result}."
+example = "Skip to the punchline: $5,500 of repairs pays itself back in 18 months."
+needs = ["result"]
+wants = ["money"]
+delivery = "spoken"
+footage_ok = true
+film = "Start mid-energy, as if you'd already been talking."
+
+[[hook]]
+id = "payoff-math"
+family = "payoff"
+name = "The math on this one"
+template = "Here's the math on {subject}."
+example = "Here's the math on a long-term tenant moving out."
+needs = ["money"]
+wants = ["result", "before_after"]
+delivery = "spoken"
+footage_ok = true
+film = "Works walking into frame; keep it under 2 seconds."
+
+[[hook]]
+id = "payoff-pays-back"
+family = "payoff"
+name = "Paid for itself"
+template = "This paid for itself in {timeframe}."
+example = "This paid for itself in 18 months."
+needs = ["timeframe", "cost"]
+wants = ["result"]
+delivery = "either"
+footage_ok = true
+film = "Point at something: the house, the photo, the invoice."
+
+[[hook]]
+id = "payoff-bottom-line"
+family = "payoff"
+name = "Bottom line up front"
+template = "Bottom line: {result}. Now the story."
+example = "Bottom line: $4,200 a year more. Now the story."
+needs = ["result", "story"]
+delivery = "spoken"
+footage_ok = true
+film = "Two tempos: slow for the bottom line, quick for 'now the story'."
+
+# ---- mistake: the warning ------------------------------------------------------------------
+
+[[hook]]
+id = "mistake-biggest"
+family = "mistake"
+name = "The biggest mistake"
+template = "The biggest mistake {audience} make with {topic}."
+example = "The biggest mistake landlords make with long-term tenants."
+needs = ["audience", "topic"]
+wants = ["mistake", "money"]
+delivery = "either"
+footage_ok = true
+film = "Serious face; this one is a warning, not a pitch."
+
+[[hook]]
+id = "mistake-stop"
+family = "mistake"
+name = "Stop doing this"
+template = "Stop {action}. Do this instead."
+example = "Stop skipping the move-out walkthrough. Do this instead."
+needs = ["contrast"]
+wants = ["mistake", "process"]
+delivery = "spoken"
+footage_ok = false
+film = "Hand up on 'stop', like you're stopping traffic."
+
+[[hook]]
+id = "mistake-costing-you"
+family = "mistake"
+name = "It's costing you"
+template = "This is costing you {money} and you don't know it."
+example = "This is costing you $350 a month and you don't know it."
+needs = ["money"]
+wants = ["mistake", "before_after"]
+delivery = "either"
+footage_ok = true
+film = "Say the number slowly; it's the whole hook."
+
+[[hook]]
+id = "mistake-almost"
+family = "mistake"
+name = "Almost made it"
+template = "I almost made a {money} mistake on this one."
+example = "I almost made a $5,500 mistake on this one."
+needs = ["money", "mistake"]
+delivery = "spoken"
+footage_ok = false
+film = "Confessional: closer to the lens than the body of the video."
+
+[[hook]]
+id = "mistake-never-without"
+family = "mistake"
+name = "Never without"
+template = "Never {action} without doing this first."
+example = "Never re-list a rental without doing this first."
+needs = ["process"]
+wants = ["mistake"]
+delivery = "spoken"
+footage_ok = false
+film = "Finger up on 'never'."
+
+[[hook]]
+id = "mistake-sign"
+family = "mistake"
+name = "The warning sign"
+template = "If your {topic} looks like this, you're losing money."
+example = "If your rental looks like this, you're losing money."
+needs = ["topic", "money"]
+wants = ["mistake", "story"]
+delivery = "spoken"
+footage_ok = false
+film = "Cut to the 'before' photo on 'like this'."
+
+# ---- contrarian: against the grain ----------------------------------------------------------
+
+[[hook]]
+id = "contrarian-everyone"
+family = "contrarian"
+name = "Everyone's wrong"
+template = "Everyone says {belief}. Here's why they're wrong."
+example = "Everyone says a long-term tenant is the dream. Here's why they're wrong."
+needs = ["contrast"]
+wants = ["audience", "result"]
+delivery = "spoken"
+footage_ok = false
+film = "Shrug on 'everyone says', lean in on 'here's why'."
+
+[[hook]]
+id = "contrarian-unpopular"
+family = "contrarian"
+name = "Unpopular opinion"
+template = "Unpopular opinion: {claim}."
+example = "Unpopular opinion: your best tenant is costing you the most money."
+needs = ["contrast"]
+wants = ["audience"]
+delivery = "either"
+footage_ok = false
+film = "Deadpan. Let the title do the work."
+
+[[hook]]
+id = "contrarian-not-about"
+family = "contrarian"
+name = "It's not about X"
+template = "This isn't about {topic}. It's about {thing}."
+example = "This isn't about repairs. It's about rent."
+needs = ["contrast", "topic"]
+wants = ["result"]
+delivery = "spoken"
+footage_ok = true
+film = "Head shake on the first sentence, nod on the second."
+
+[[hook]]
+id = "contrarian-myth"
+family = "contrarian"
+name = "The myth"
+template = "The {topic} myth that costs {audience} money."
+example = "The 'good tenant' myth that costs landlords money."
+needs = ["audience", "money"]
+wants = ["contrast"]
+delivery = "either"
+footage_ok = true
+film = "Air quotes are allowed exactly once."
+
+[[hook]]
+id = "contrarian-dont-need"
+family = "contrarian"
+name = "You don't need X, you need Y"
+template = "You don't need {thing}. You need {other_thing}."
+example = "You don't need a renovation. You need a walkthrough."
+needs = ["process"]
+wants = ["contrast", "money"]
+delivery = "spoken"
+footage_ok = false
+film = "Equal weight on both sentences; no smile."
+
+# ---- question: make them answer in their head --------------------------------------------------
+
+[[hook]]
+id = "question-when-last"
+family = "question"
+name = "When did you last…"
+template = "{Audience}: when did you last {action}?"
+example = "Landlords: when did you last walk your own rental?"
+needs = ["audience"]
+wants = ["process"]
+delivery = "spoken"
+footage_ok = false
+film = "Point at the lens on the audience word."
+
+[[hook]]
+id = "question-would-you"
+family = "question"
+name = "Would you spend it?"
+template = "Would you spend {money} to get {result}?"
+example = "Would you spend $5,500 to get $4,200 a year, forever?"
+needs = ["money", "result"]
+delivery = "spoken"
+footage_ok = true
+film = "Pause after the question like you want the comment."
+
+[[hook]]
+id = "question-what-if"
+family = "question"
+name = "What if…"
+template = "What if {belief} is the thing holding your {topic} back?"
+example = "What if keeping the rent low is the thing holding your rental back?"
+needs = ["contrast", "topic"]
+delivery = "spoken"
+footage_ok = false
+film = "Soft start, hard finish."
+
+[[hook]]
+id = "question-how-much"
+family = "question"
+name = "How much is it costing?"
+template = "How much is {problem} costing you every month?"
+example = "How much is deferred maintenance costing you every month?"
+needs = ["money"]
+wants = ["mistake", "audience"]
+delivery = "spoken"
+footage_ok = false
+film = "Follow with the real number from the video straight away."
+
+[[hook]]
+id = "question-guess"
+family = "question"
+name = "Guess the number"
+template = "Guess what {money} bought on this {topic}."
+example = "Guess what $5,500 bought on this rental."
+needs = ["money", "topic"]
+wants = ["list", "story"]
+delivery = "spoken"
+footage_ok = false
+film = "Playful; hold up the before photo while they guess."
+
+# ---- curiosity: the gap ----------------------------------------------------------------------
+
+[[hook]]
+id = "curiosity-nobody-tells"
+family = "curiosity"
+name = "Nobody tells you"
+template = "Nobody tells {audience} this about {topic}."
+example = "Nobody tells landlords this about long-term tenants."
+needs = ["audience", "topic"]
+wants = ["secret", "contrast"]
+delivery = "either"
+footage_ok = true
+film = "Lower your voice slightly; it's a confidence."
+
+[[hook]]
+id = "curiosity-one-thing"
+family = "curiosity"
+name = "One thing made the difference"
+template = "One thing made the difference on {subject}."
+example = "One thing made the difference on this re-rent."
+needs = ["result"]
+wants = ["process"]
+delivery = "spoken"
+footage_ok = true
+film = "Hold up one finger; don't say what the thing is."
+
+[[hook]]
+id = "curiosity-wait-for-number"
+family = "curiosity"
+name = "Wait for the number"
+template = "Wait for the number at the end."
+example = "Wait for the number at the end."
+needs = ["money", "result"]
+delivery = "text"
+footage_ok = true
+film = "Title only; cold-open the body and let the caption carry it."
+
+[[hook]]
+id = "curiosity-didnt-expect"
+family = "curiosity"
+name = "Didn't see it coming"
+template = "I did not expect {subject} to go like this."
+example = "I did not expect this walkthrough to go like this."
+needs = ["story"]
+wants = ["emotion", "result"]
+delivery = "spoken"
+footage_ok = false
+film = "Genuine; think of the actual moment before you say it."
+
+[[hook]]
+id = "curiosity-part-nobody-shows"
+family = "curiosity"
+name = "The part nobody shows"
+template = "The part of {topic} nobody shows you."
+example = "The part of property management nobody shows you."
+needs = ["topic"]
+wants = ["process", "secret"]
+delivery = "either"
+footage_ok = true
+film = "Cut to the least glamorous B-roll you have right after."
+
+# ---- story: drop them into it ----------------------------------------------------------------
+
+[[hook]]
+id = "story-walked-in"
+family = "story"
+name = "We walked in and…"
+template = "We walked in and the first thing we saw was {thing}."
+example = "We walked in and the first thing we saw was the kitchen."
+needs = ["story"]
+wants = ["place", "emotion"]
+delivery = "spoken"
+footage_ok = false
+film = "Walking into frame sells this one."
+
+[[hook]]
+id = "story-call"
+family = "story"
+name = "The call"
+template = "A {audience_singular} called us about {subject}. Here's what happened."
+example = "An owner called us about Mission Place. Here's what happened."
+needs = ["audience", "story"]
+wants = ["place"]
+delivery = "spoken"
+footage_ok = false
+film = "Phone in hand, lowered as you start."
+
+[[hook]]
+id = "story-started-ended"
+family = "story"
+name = "Started with, ended with"
+template = "This one started with {thing} and ended with {result}."
+example = "This one started with a move-out and ended with $350 more a month."
+needs = ["result", "story"]
+delivery = "spoken"
+footage_ok = true
+film = "Two beats, two gestures: left hand, right hand."
+
+[[hook]]
+id = "story-mid-sentence"
+family = "story"
+name = "Mid-sentence"
+template = "…and that's when we found {thing}."
+example = "…and that's when we found the water damage."
+needs = ["story"]
+wants = ["emotion"]
+delivery = "spoken"
+footage_ok = false
+film = "Start talking before you hit record; the cut lands mid-word."
+
+[[hook]]
+id = "story-timeframe-ago"
+family = "story"
+name = "Ago"
+template = "{timeframe} ago this {topic} looked very different."
+example = "Two weeks ago this rental looked very different."
+needs = ["timeframe", "story"]
+wants = ["before_after"]
+delivery = "spoken"
+footage_ok = false
+film = "Cut to the before photo on 'very different'."
+
+[[hook]]
+id = "story-in-place"
+family = "story"
+name = "In the place"
+template = "A {topic} in {place}. {result}."
+example = "A rental in Danville. $350 more a month after one walkthrough."
+needs = ["place", "result"]
+delivery = "either"
+footage_ok = true
+film = "Film it on location if you can; otherwise title over the exterior photo."
+
+# ---- before_after: the transformation ---------------------------------------------------------
+
+[[hook]]
+id = "before-after-numbers"
+family = "before_after"
+name = "Before / after numbers"
+template = "Before: {money_before}. After: {money_after}."
+example = "Before: $3,250 a month. After: $3,600 a month."
+needs = ["before_after"]
+wants = ["timeframe"]
+delivery = "either"
+footage_ok = true
+film = "Title card does the heavy lifting; keep the spoken line identical."
+
+[[hook]]
+id = "before-after-what-changed"
+family = "before_after"
+name = "What changed"
+template = "{money_before} to {money_after}. Here's what changed."
+example = "$3,250 to $3,600. Here's what changed."
+needs = ["before_after"]
+wants = ["list", "process"]
+delivery = "spoken"
+footage_ok = true
+film = "Pause before 'what changed'; the body answers it."
+
+[[hook]]
+id = "before-after-same-thing"
+family = "before_after"
+name = "Same thing, new number"
+template = "Same {topic}. {money_after} instead of {money_before}."
+example = "Same house. $3,600 instead of $3,250."
+needs = ["before_after", "topic"]
+delivery = "either"
+footage_ok = true
+film = "Hold the two photos side by side if you have them."
+
+[[hook]]
+id = "before-after-watch"
+family = "before_after"
+name = "Watch it go from"
+template = "Watch this {topic} go from {state_a} to {state_b}."
+example = "Watch this rental go from dated to leased in 14 days."
+needs = ["story", "topic"]
+wants = ["timeframe", "result"]
+delivery = "spoken"
+footage_ok = false
+film = "Before photo on the first state, after photo on the second."
+
+# ---- list: countable promise ----------------------------------------------------------------
+
+[[hook]]
+id = "list-count-things"
+family = "list"
+name = "N things"
+template = "{count} things we do before {action}."
+example = "Three things we do before re-listing a rental."
+needs = ["count", "process"]
+wants = ["list"]
+delivery = "either"
+footage_ok = true
+film = "Fingers up for the count."
+
+[[hook]]
+id = "list-every-in-seconds"
+family = "list"
+name = "Every X, in N seconds"
+template = "Every {thing} we did on {subject}, in 45 seconds."
+example = "Every repair we made on this rental, in 45 seconds."
+needs = ["process"]
+wants = ["list", "money"]
+delivery = "spoken"
+footage_ok = true
+film = "Fast; this promises pace."
+
+[[hook]]
+id = "list-ranked"
+family = "list"
+name = "Ranked by return"
+template = "The {count} {topic} fixes with the best return, ranked."
+example = "The 5 rental fixes with the best return, ranked."
+needs = ["count", "money"]
+wants = ["list"]
+delivery = "either"
+footage_ok = false
+film = "Only if the body actually ranks them."
+
+[[hook]]
+id = "list-first-thing"
+family = "list"
+name = "The first thing we do"
+template = "The first thing we do on every {topic}."
+example = "The first thing we do on every move-out."
+needs = ["process", "topic"]
+delivery = "spoken"
+footage_ok = true
+film = "Point behind you, as if it's happening right now."
+
+# ---- time: speed and duration --------------------------------------------------------------------
+
+[[hook]]
+id = "time-heres-how"
+family = "time"
+name = "Timeframe, here's how"
+template = "{timeframe}. Here's how."
+example = "14 days from move-out to new lease. Here's how."
+needs = ["timeframe", "result"]
+delivery = "either"
+footage_ok = true
+film = "Two words of pause between the sentences."
+
+[[hook]]
+id = "time-next-45"
+family = "time"
+name = "In the next 45 seconds"
+template = "In the next 45 seconds I'll show you {result}."
+example = "In the next 45 seconds I'll show you how $5,500 became $4,200 a year."
+needs = ["result"]
+wants = ["money"]
+delivery = "spoken"
+footage_ok = false
+film = "Keep moving: walk, point, hand off a prop."
+
+[[hook]]
+id = "time-years-in-one"
+family = "time"
+name = "Years in one video"
+template = "{timeframe} of {topic} in one video."
+example = "Nine years of one tenant in one video."
+needs = ["timeframe", "topic"]
+wants = ["story"]
+delivery = "either"
+footage_ok = true
+film = "Title works alone; speak it only if the number is big."
+
+# ---- cost: price as the hook ----------------------------------------------------------------------
+
+[[hook]]
+id = "cost-anchor"
+family = "cost"
+name = "This cost"
+template = "This cost {money}."
+example = "This cost $5,500."
+needs = ["cost"]
+wants = ["result"]
+delivery = "either"
+footage_ok = true
+film = "Three words. Resist adding a fourth."
+
+[[hook]]
+id = "cost-worth-it"
+family = "cost"
+name = "Worth it?"
+template = "Was {money} worth it? Here's the answer."
+example = "Was $5,500 worth it? Here's the answer."
+needs = ["cost", "result"]
+delivery = "spoken"
+footage_ok = true
+film = "Raise eyebrows on the question, drop them on the answer."
+
+[[hook]]
+id = "cost-where-it-goes"
+family = "cost"
+name = "Where the money goes"
+template = "Where {money} actually goes on a {topic}."
+example = "Where $5,500 actually goes on a rental turnover."
+needs = ["cost", "topic"]
+wants = ["list"]
+delivery = "either"
+footage_ok = true
+film = "Cut to receipts, a list, or the before photos right after."
+
+[[hook]]
+id = "cost-best-spent"
+family = "cost"
+name = "Best money we spent"
+template = "The best {money} we ever spent on a {topic}."
+example = "The best $5,500 we ever spent on a rental."
+needs = ["cost", "result"]
+delivery = "either"
+footage_ok = true
+film = "Smile on this one; it's a brag."
+
+# ---- comparison: X vs Y ---------------------------------------------------------------------------
+
+[[hook]]
+id = "compare-vs"
+family = "comparison"
+name = "X vs Y"
+template = "{money_before} vs {money_after}. The difference was {thing}."
+example = "$3,250 vs $3,600. The difference was one walkthrough."
+needs = ["before_after"]
+wants = ["process"]
+delivery = "either"
+footage_ok = true
+film = "Say 'versus' in full; it reads better in captions too."
+
+[[hook]]
+id = "compare-two-ways"
+family = "comparison"
+name = "Two ways"
+template = "Two ways to handle {subject}. Only one makes money."
+example = "Two ways to handle a long-term tenant moving out. Only one makes money."
+needs = ["topic", "money"]
+wants = ["contrast"]
+delivery = "spoken"
+footage_ok = false
+film = "Two fingers, then one."
+
+[[hook]]
+id = "compare-instead-of"
+family = "comparison"
+name = "Instead of"
+template = "We did {thing} instead of {other_thing}. {result}."
+example = "We did a walkthrough instead of a renovation. $350 more a month."
+needs = ["comparison", "result"]
+delivery = "spoken"
+footage_ok = false
+film = "Weigh the two options with your hands."
+
+# ---- proof: credibility first ----------------------------------------------------------------------
+
+[[hook]]
+id = "proof-every-time"
+family = "proof"
+name = "Every single time"
+template = "We do this every time a {audience_singular} {event}."
+example = "We do this every time a tenant moves out."
+needs = ["process", "audience"]
+wants = ["proof"]
+delivery = "spoken"
+footage_ok = false
+film = "Matter-of-fact; the routine is the point."
+
+[[hook]]
+id = "proof-pattern"
+family = "proof"
+name = "The pattern"
+template = "We've seen this on {number} {topic}s. Same pattern every time."
+example = "We've seen this on 40 rentals. Same pattern every time."
+needs = ["proof", "number"]
+delivery = "spoken"
+footage_ok = false
+film = "Only with a real count from the video."
+
+[[hook]]
+id = "proof-exactly-how"
+family = "proof"
+name = "Exactly how we do it"
+template = "This is exactly how we {action}, step by step."
+example = "This is exactly how we turn a dated rental, step by step."
+needs = ["process"]
+wants = ["list"]
+delivery = "spoken"
+footage_ok = true
+film = "Clipboard or phone in hand sells 'step by step'."
+
+# ---- challenge: dare them -------------------------------------------------------------------------
+
+[[hook]]
+id = "challenge-bet"
+family = "challenge"
+name = "I bet"
+template = "I bet your {topic} is {problem}. Here's how to check."
+example = "I bet your rental is under market. Here's how to check."
+needs = ["audience", "topic"]
+wants = ["money", "process"]
+delivery = "spoken"
+footage_ok = false
+film = "Point on 'your'; smile on 'bet'."
+
+[[hook]]
+id = "challenge-try-this"
+family = "challenge"
+name = "Try this"
+template = "Try this on your next {topic} and tell me it didn't work."
+example = "Try this on your next move-out and tell me it didn't work."
+needs = ["process"]
+wants = ["audience"]
+delivery = "spoken"
+footage_ok = false
+film = "Dare energy; invite the comment."
+
+[[hook]]
+id = "challenge-do-the-math"
+family = "challenge"
+name = "Do the math with me"
+template = "Do the math with me: {money} in, {result}."
+example = "Do the math with me: $5,500 in, $4,200 a year back."
+needs = ["money", "result"]
+delivery = "spoken"
+footage_ok = true
+film = "Write the numbers on something as you say them."
+
+# ---- address: talk to one person -----------------------------------------------------------------
+
+[[hook]]
+id = "address-if-youre"
+family = "address"
+name = "If you're a…"
+template = "If you're a {audience_singular} with {situation}, this is for you."
+example = "If you're a landlord with a tenant who's been there for years, this is for you."
+needs = ["audience"]
+wants = ["story"]
+delivery = "spoken"
+footage_ok = false
+film = "Slow, direct, like you're answering their DM."
+
+[[hook]]
+id = "address-pov"
+family = "address"
+name = "POV"
+template = "POV: your {topic} {event}."
+example = "POV: your tenant of nine years just gave notice."
+needs = ["audience", "story"]
+delivery = "text"
+footage_ok = true
+film = "Title only works; if spoken, keep it flat."
+
+[[hook]]
+id = "address-this-ones-for-you"
+family = "address"
+name = "This one's for you"
+template = "{Audience}, this one's for you."
+example = "Landlords, this one's for you."
+needs = ["audience"]
+delivery = "either"
+footage_ok = true
+film = "Cold-open the payoff line right after."
+
+[[hook]]
+id = "address-secretly-costing"
+family = "address"
+name = "What it's secretly costing you"
+template = "You own a {topic}. Here's what it's secretly costing you."
+example = "You own a rental. Here's what it's secretly costing you."
+needs = ["audience", "money"]
+wants = ["mistake"]
+delivery = "spoken"
+footage_ok = false
+film = "Second sentence quieter than the first."
+
+# ---- objection: answer the pushback -----------------------------------------------------------------
+
+[[hook]]
+id = "objection-yes-but"
+family = "objection"
+name = "Yes, but"
+template = "Yes, it cost {money}. No, it wasn't a waste."
+example = "Yes, it cost $5,500. No, it wasn't a waste."
+needs = ["cost", "result"]
+delivery = "either"
+footage_ok = true
+film = "Nod on yes, shake on no."
+
+[[hook]]
+id = "objection-i-know"
+family = "objection"
+name = "I know what you're thinking"
+template = "I know what you're thinking: {belief}."
+example = "I know what you're thinking: why fix anything if the tenant is happy?"
+needs = ["contrast"]
+wants = ["audience"]
+delivery = "spoken"
+footage_ok = false
+film = "Say the objection in their voice, then switch back to yours."
+
+[[hook]]
+id = "objection-before-you"
+family = "objection"
+name = "Before you…"
+template = "Before you {action}, watch this."
+example = "Before you re-list your rental, watch this."
+needs = ["process"]
+wants = ["audience", "mistake"]
+delivery = "either"
+footage_ok = true
+film = "Hand out toward the lens on 'before'."
+
+# ---- promise: tell them what they'll get -------------------------------------------------------------
+
+[[hook]]
+id = "promise-by-the-end"
+family = "promise"
+name = "By the end of this"
+template = "By the end of this you'll know exactly {outcome}."
+example = "By the end of this you'll know exactly what to fix first on a move-out."
+needs = ["process"]
+wants = ["list"]
+delivery = "spoken"
+footage_ok = false
+film = "Confident, unhurried."
+
+[[hook]]
+id = "promise-show-you-how"
+family = "promise"
+name = "I'll show you how"
+template = "I'll show you how {money} became {result}."
+example = "I'll show you how $5,500 became $4,200 a year."
+needs = ["money", "result"]
+delivery = "spoken"
+footage_ok = true
+film = "Hands apart on the first number, together on the second."
+
+# ---- reveal: look at this ----------------------------------------------------------------------------
+
+[[hook]]
+id = "reveal-watch-what"
+family = "reveal"
+name = "Watch what it does"
+template = "Watch what {money} does to a {topic}."
+example = "Watch what $5,500 does to a dated rental."
+needs = ["money", "topic"]
+wants = ["before_after", "story"]
+delivery = "either"
+footage_ok = true
+film = "Before photo under the title; after photo at the payoff."
+
+[[hook]]
+id = "reveal-dont-scroll"
+family = "reveal"
+name = "Don't scroll"
+template = "Don't scroll. Look at {thing}."
+example = "Don't scroll. Look at this kitchen."
+needs = ["story"]
+wants = ["emotion"]
+delivery = "spoken"
+footage_ok = false
+film = "Hold the before photo up to the lens, or cut straight to it."
+
+[[hook]]
+id = "reveal-stay-for"
+family = "reveal"
+name = "Stay for the end"
+template = "Stay for the number at the end. It surprised me."
+example = "Stay for the number at the end. It surprised me."
+needs = ["result", "money"]
+delivery = "either"
+footage_ok = true
+film = "Only if the ending really has a number."
+
+# ---- loss: what they're missing --------------------------------------------------------------------------
+
+[[hook]]
+id = "loss-on-the-table"
+family = "loss"
+name = "Money on the table"
+template = "You're leaving {money} on the table."
+example = "You're leaving $350 a month on the table."
+needs = ["money"]
+wants = ["before_after", "audience"]
+delivery = "either"
+footage_ok = true
+film = "Flat, no judgement; let the number sting."
+
+[[hook]]
+id = "loss-a-month-gone"
+family = "loss"
+name = "Gone every month"
+template = "{money} a month, gone, because of {problem}."
+example = "$350 a month, gone, because of deferred maintenance."
+needs = ["money"]
+wants = ["mistake"]
+delivery = "spoken"
+footage_ok = false
+film = "Three beats, three pauses."
+
+[[hook]]
+id = "loss-most-are"
+family = "loss"
+name = "Most of you are"
+template = "Most {audience} are leaving money on the table. Here's where."
+example = "Most landlords are leaving money on the table. Here's where."
+needs = ["audience", "money"]
+delivery = "spoken"
+footage_ok = true
+film = "Point on 'here's where', then cut."
+
+# ---- confession: human first ----------------------------------------------------------------------------
+
+[[hook]]
+id = "confession-almost-skipped"
+family = "confession"
+name = "I almost skipped it"
+template = "I almost skipped {action}. Glad I didn't."
+example = "I almost skipped the walkthrough. Glad I didn't."
+needs = ["process"]
+wants = ["story", "result"]
+delivery = "spoken"
+footage_ok = false
+film = "Quieter than the body; sit down for this one if you're standing."
+
+[[hook]]
+id = "confession-was-wrong"
+family = "confession"
+name = "I was wrong"
+template = "I was wrong about {topic}."
+example = "I was wrong about long-term tenants."
+needs = ["contrast", "topic"]
+delivery = "either"
+footage_ok = false
+film = "No prop, no gesture."
+
+# ---- hot_take: a line they'll repeat ------------------------------------------------------------------------
+
+[[hook]]
+id = "hot-take-tax"
+family = "hot_take"
+name = "It's a tax"
+template = "{problem} is a tax on {audience}."
+example = "Deferred maintenance is a tax on landlords."
+needs = ["audience"]
+wants = ["mistake", "money"]
+delivery = "either"
+footage_ok = true
+film = "Say it like a fact, not an opinion."
+
+[[hook]]
+id = "hot-take-your-best-is-worst"
+family = "hot_take"
+name = "Best is worst"
+template = "Your best {thing} might be your most expensive one."
+example = "Your best tenant might be your most expensive one."
+needs = ["contrast", "money"]
+wants = ["audience"]
+delivery = "either"
+footage_ok = true
+film = "Title alone works; if spoken, raise an eyebrow on 'expensive'."
+
+# ---- how_to: the utility promise ---------------------------------------------------------------------------
+
+[[hook]]
+id = "how-to-exactly"
+family = "how_to"
+name = "How to, exactly"
+template = "How to {action}, exactly how we do it."
+example = "How to turn a dated rental in two weeks, exactly how we do it."
+needs = ["how_to"]
+wants = ["process", "timeframe"]
+delivery = "either"
+footage_ok = true
+film = "Walk-and-talk if you can."
+
+[[hook]]
+id = "how-to-without"
+family = "how_to"
+name = "Without the usual cost"
+template = "How to get {result} without {thing}."
+example = "How to get $350 more a month without a renovation."
+needs = ["result"]
+wants = ["money", "contrast"]
+delivery = "spoken"
+footage_ok = false
+film = "Push 'without' away with your hand."
