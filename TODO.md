@@ -5,21 +5,7 @@ State at hand-off: hook production is committed as `21e515b` (catalog `vflow/dat
 key**; the Claude hook writer has only run against mocks. The README section "Hooks: film ten openings, get ten
 videos" describes the intended flow.
 
-## Blocked: get a Claude key in front of vflow
-
-- [ ] No key is stored for the app (keyring) and none is set in the shells Claude Desktop spawns. The user has a Claude
-      Desktop session preset **"vflow 2"** whose variables include `CLAUDE_API_KEY`, but (a) only sessions started from that
-      preset see it, and (b) vflow reads `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` (`vflow/llm.py: available()`,
-      `vflow/app/store.py: SECRETS`), not `CLAUDE_API_KEY`. Pick one:
-  - paste the key into the app's Settings → "Claude API key" (lands in Windows Credential Manager; CLI runs pick it up
-    only via the app, so also export it for CLI tests), or
-  - set `ANTHROPIC_API_KEY` as a user environment variable and restart Claude Desktop, or
-  - start the next session from the "vflow 2" preset and add `CLAUDE_API_KEY` as a fallback name in `llm.available()`
-    and when constructing `anthropic.Anthropic(...)` (two small edits, plus `store.load_api_key_into_env`).
-- [ ] The linked session "Run the Claude hook writer on the sample clip and tune it" is idle, blocked on the key. Resume
-      it once the key is reachable, or archive it and do the next item here.
-
-## Next: run the Claude pass for real
+## Run the Claude pass for real
 
 - [ ] `vflow hooks "C:\Users\swens\Downloads\Mission Walkthrough Voiceover.mp4"` from the repo folder (the cached plan in
       `work/` is reused, so it is only the one API call). Judge the ten hooks against the rules in `hooks.HOOKS_SYSTEM`:
